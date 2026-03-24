@@ -423,3 +423,7 @@ When extending this repo:
 - avoid claiming support for workflows that are not grounded in the source material
 
 The source notes in `Readme/` are useful starting points for building additional skills.
+
+## Star 记录
+
+[![Star History Chart](https://api.star-history.com/svg?repos=JiaqiLiZju/s2fm_agent&type=Date)](https://star-history.com/#JiaqiLiZju/s2fm_agent&Date)
