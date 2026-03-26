@@ -62,16 +62,16 @@ The repository currently includes ten packaged skills:
 
 | Skill ID | Best for | Explicit invocation | Docs |
 | --- | --- | --- | --- |
-| `alphagenome-api` | AlphaGenome setup, variant prediction, plotting, and troubleshooting | `$alphagenome-api` | [`SKILL.md`](./alphagenome-api/SKILL.md) · [`references/`](./alphagenome-api/references/) |
+| `alphagenome-api` | AlphaGenome setup, variant prediction, plotting, and troubleshooting | `$alphagenome-api` | [`SKILL.md`](./skills/alphagenome-api/SKILL.md) · [`references/`](./skills/alphagenome-api/references/) |
 | `basset-workflows` | Legacy Basset Torch7 preprocessing, prediction, interpretation, and SAD workflows | `$basset-workflows` | [`SKILL.md`](./basset-workflows/SKILL.md) · [`references/`](./basset-workflows/references/) |
 | `bpnet` | BPNet setup, preprocessing, train/predict/SHAP workflows, and motif/hit-calling integration | `$bpnet` | [`SKILL.md`](./bpnet/SKILL.md) · [`references/`](./bpnet/references/) |
-| `borzoi-workflows` | Borzoi setup, tutorials, model download, variant scoring, and interpretation workflows | `$borzoi-workflows` | [`SKILL.md`](./borzoi-workflows/SKILL.md) · [`references/`](./borzoi-workflows/references/) |
-| `dnabert2` | DNABERT2 embeddings, GUE evaluation, CSV validation, and fine-tuning workflows | `$dnabert2` | [`SKILL.md`](./dnabert2/SKILL.md) · [`references/`](./dnabert2/references/) |
-| `evo2-inference` | Evo 2 installation, checkpoint choice, inference, and deployment paths | `$evo2-inference` | [`SKILL.md`](./evo2-inference/SKILL.md) · [`references/`](./evo2-inference/references/) |
-| `gpn-models` | Choosing between GPN-family frameworks and grounded loading/CLI workflows | `$gpn-models` | [`SKILL.md`](./gpn-models/SKILL.md) · [`references/`](./gpn-models/references/) |
+| `borzoi-workflows` | Borzoi setup, tutorials, model download, variant scoring, and interpretation workflows | `$borzoi-workflows` | [`SKILL.md`](./skills/borzoi-workflows/SKILL.md) · [`references/`](./skills/borzoi-workflows/references/) |
+| `dnabert2` | DNABERT2 embeddings, GUE evaluation, CSV validation, and fine-tuning workflows | `$dnabert2` | [`SKILL.md`](./skills/dnabert2/SKILL.md) · [`references/`](./skills/dnabert2/references/) |
+| `evo2-inference` | Evo 2 installation, checkpoint choice, inference, and deployment paths | `$evo2-inference` | [`SKILL.md`](./skills/evo2-inference/SKILL.md) · [`references/`](./skills/evo2-inference/references/) |
+| `gpn-models` | Choosing between GPN-family frameworks and grounded loading/CLI workflows | `$gpn-models` | [`SKILL.md`](./skills/gpn-models/SKILL.md) · [`references/`](./skills/gpn-models/references/) |
 | `nucleotide-transformer` | Classic NT v1/v2 JAX inference, tokenization, and embeddings workflows | `$nucleotide-transformer` | [`SKILL.md`](./nucleotide-transformer/SKILL.md) · [`references/`](./nucleotide-transformer/references/) |
-| `nucleotide-transformer-v3` | NTv3 Transformers inference, species conditioning, setup troubleshooting, and length-aware runs | `$nucleotide-transformer-v3` | [`SKILL.md`](./nucleotide-transformer-v3/SKILL.md) · [`references/`](./nucleotide-transformer-v3/references/) |
-| `segment-nt` | SegmentNT, SegmentEnformer, and SegmentBorzoi segmentation inference workflows | `$segment-nt` | [`SKILL.md`](./segment-nt/SKILL.md) · [`references/`](./segment-nt/references/) |
+| `nucleotide-transformer-v3` | NTv3 Transformers inference, species conditioning, setup troubleshooting, and length-aware runs | `$nucleotide-transformer-v3` | [`SKILL.md`](./skills/nucleotide-transformer-v3/SKILL.md) · [`references/`](./skills/nucleotide-transformer-v3/references/) |
+| `segment-nt` | SegmentNT, SegmentEnformer, and SegmentBorzoi segmentation inference workflows | `$segment-nt` | [`SKILL.md`](./skills/segment-nt/SKILL.md) · [`references/`](./skills/segment-nt/references/) |
 
 Source notes used to build or plan skills are in [`Readme/`](./Readme/).
 
@@ -81,23 +81,30 @@ Source notes used to build or plan skills are in [`Readme/`](./Readme/).
 s2f-skills/
 ├── agent/
 ├── registry/
+├── skills/
 ├── playbooks/
 ├── evals/
 ├── docs/
 ├── README.md
 ├── Readme/
 ├── scripts/
-├── alphagenome-api/
 ├── basset-workflows/
 ├── bpnet/
-├── borzoi-workflows/
-├── dnabert2/
-├── evo2-inference/
-├── gpn-models/
 ├── nucleotide-transformer/
-├── nucleotide-transformer-v3/
-└── segment-nt/
+└── skills/
 ```
+
+Namespace migration note:
+
+- The following tested skills are now canonical under `skills/<skill-id>/`:
+  - `alphagenome-api`
+  - `borzoi-workflows`
+  - `nucleotide-transformer-v3`
+  - `gpn-models`
+  - `evo2-inference`
+  - `dnabert2`
+  - `segment-nt`
+- Root-level paths for these migrated skills are now removed; use `skills/<skill-id>/` paths.
 
 ## Deployment Guide
 
@@ -196,14 +203,14 @@ conda activate evo2-full
 
 ```bash
 export NVCF_RUN_KEY='your_run_key'
-python evo2-inference/scripts/run_hosted_api.py --num-tokens 8 --top-k 1
+python skills/evo2-inference/scripts/run_hosted_api.py --num-tokens 8 --top-k 1
 ```
 
 Full hosted workflow with plots:
 
 ```bash
 export NVCF_RUN_KEY='your_run_key'
-python evo2-inference/scripts/run_real_evo2_workflow.py --output-dir evo2-inference/results
+python skills/evo2-inference/scripts/run_real_evo2_workflow.py --output-dir skills/evo2-inference/results
 ```
 
 Operational notes reflected in this repo:
@@ -262,12 +269,14 @@ make eval-routing
 Note:
 
 - `validate_routing.sh` invokes `route_query.sh` for each eval case, so runtime routing and offline eval use one routing logic source.
+- routing eval now includes both `route` and `clarify` decisions.
 
 Run one query through the router:
 
 ```bash
 ./scripts/route_query.sh --query "Use \$dnabert2 to validate my train/dev/test CSV."
 ./scripts/route_query.sh --query "I need NTv3 track prediction for human hg38." --format json
+./scripts/route_query.sh --query "Train a model on fasta labels."
 # or
 make route-query QUERY='Help me run AlphaGenome predict_variant with RNA output'
 make route-query QUERY='Need variant-effect guidance' TASK='variant-effect'
@@ -314,12 +323,13 @@ Optional helper scripts for repeated validation or calculations.
 
 Current examples:
 
-- `dnabert2/scripts/validate_dataset_csv.py`
-- `dnabert2/scripts/recommend_max_length.py`
-- `nucleotide-transformer-v3/scripts/check_valid_length.py`
-- `segment-nt/scripts/compute_rescaling_factor.py`
-- `evo2-inference/scripts/run_hosted_api.py`
-- `evo2-inference/scripts/run_real_evo2_workflow.py`
+- `skills/dnabert2/scripts/validate_dataset_csv.py`
+- `skills/dnabert2/scripts/recommend_max_length.py`
+- `skills/nucleotide-transformer-v3/scripts/check_valid_length.py`
+- `skills/segment-nt/scripts/compute_rescaling_factor.py`
+- `skills/segment-nt/scripts/run_segment_nt_region.py`
+- `skills/evo2-inference/scripts/run_hosted_api.py`
+- `skills/evo2-inference/scripts/run_real_evo2_workflow.py`
 
 ### `agents/openai.yaml`
 
@@ -333,37 +343,61 @@ UI-facing metadata for discovery and invocation:
 
 ## Orchestration Layer
 
-This repository now also includes a lightweight agent orchestration layer:
+`s2f` now ships with a deterministic agent layer that routes queries across skills and decides whether to answer directly (`route`) or ask one focused follow-up (`clarify`).
+
+Core components:
 
 - `agent/`: orchestrator identity, routing policy, and safety boundaries
-- `registry/`: machine-readable skill index and tag taxonomy
+- `registry/`: machine-readable skill index, tag taxonomy, routing config, and task input contracts
 - `playbooks/`: cross-skill task patterns (`variant-effect`, `embedding`, `fine-tuning`, `track-prediction`, `environment-setup`)
-- `evals/routing/`: initial routing evaluation cases
-- `scripts/route_query.sh`: runtime router for one-off query routing (text/json output)
-- `scripts/run_agent.sh`: full runtime orchestration output (route + missing-input checks + playbook mapping)
+- `evals/routing/`: routing evaluation cases for both `route` and `clarify` decisions
+- `scripts/route_query.sh`: runtime router (`decision` + `confidence` + ranked candidates + reasons)
+- `scripts/run_agent.sh`: full orchestration output (router decision + input contract checks + playbook mapping)
 
-Each packaged skill now includes a machine-readable `skill.yaml` for routing metadata.
+Routing lifecycle per query:
 
-Current compatibility note:
+1. infer task from explicit `--task`, alias rules, and query text
+2. rank candidate skills via explicit mention, trigger hits, and task alignment
+3. estimate confidence and emit `decision=route` or `decision=clarify`
+4. when routed, resolve required inputs from task contracts first, then skill contracts
 
-- skill package paths remain at repository root for backward compatibility
-- scripts now enumerate skills from `registry/skills.yaml` rather than hardcoded lists
+Compatibility note:
+
+- migrated skills use `skills/<skill-id>/` as the canonical path
+- operational scripts enumerate skills from `registry/skills.yaml` rather than hardcoded lists
 
 ## Agent Runtime CLI
 
-Route only:
+Use `route_query.sh` when you only need routing decisions:
 
 ```bash
 ./scripts/route_query.sh --query "Use \$dnabert2 to validate my train/dev/test CSV."
 ./scripts/route_query.sh --query "I need NTv3 track prediction for hg38." --format json
+./scripts/route_query.sh --query "Train a model on fasta labels."
 ```
 
-Full orchestration output:
+Typical outputs:
+
+- high/medium confidence query -> `decision: route` with primary/secondary skills
+- low confidence query -> `decision: clarify` with one focused clarification question
+
+Use `run_agent.sh` when you need execution-facing orchestration details:
 
 ```bash
 ./scripts/run_agent.sh --query "Need variant-effect guidance around chr12 with REF/ALT."
 ./scripts/run_agent.sh --query "Help me run Evo2 generation without NVIDIA GPU" --format json
 ```
+
+`run_agent.sh` additionally returns:
+
+- `required_inputs_source` (`task-contract:<task>` or `skill:<id>`)
+- `required_inputs`, `provided_inputs`, `missing_inputs`
+- selected `playbook` (when available), `constraints`, and `next_prompt`
+
+Useful options:
+
+- force task selection with `--task` when intent is known
+- use `--format json` for downstream tooling or UI integration
 
 Interactive local console:
 

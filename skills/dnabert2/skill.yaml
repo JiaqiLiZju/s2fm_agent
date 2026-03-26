@@ -1,7 +1,7 @@
 schema_version: 1
 id: dnabert2
 title: DNABERT-2
-path: dnabert2
+path: skills/dnabert2
 status: active
 family: transformer-embedding-and-finetuning
 tasks:

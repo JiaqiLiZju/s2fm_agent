@@ -61,6 +61,12 @@ Execution order:
 2. related `playbooks/<task>/README.md`
 3. skill `references/` and helper scripts
 
+Decision policy:
+
+- emit `decision=route` when confidence is sufficient
+- emit `decision=clarify` when confidence is low and user did not provide an explicit task
+- include confidence level and a single focused clarification question
+
 Answer format:
 
 - short routing decision sentence

@@ -127,6 +127,17 @@ run_import_check() {
   fi
 }
 
+skill_file_path() {
+  local skill_id="$1"
+  local rel_path="$2"
+  local skill_path
+  skill_path="$(registry_get_path "$registry_file" "$skill_id" || true)"
+  if [[ -z "$skill_path" ]]; then
+    skill_path="$skill_id"
+  fi
+  printf '%s/%s/%s\n' "$REPO_ROOT" "$skill_path" "$rel_path"
+}
+
 check_exists "$REPO_ROOT/README.md" "repo README"
 check_exists "$REPO_ROOT/Makefile" "Makefile"
 check_exists "$REPO_ROOT/agent/SYSTEM.md" "agent system spec"
@@ -135,6 +146,8 @@ check_exists "$REPO_ROOT/agent/SAFETY.md" "agent safety spec"
 check_exists "$REPO_ROOT/agent/agent.yaml" "agent metadata"
 check_exists "$registry_file" "skill registry"
 check_exists "$REPO_ROOT/registry/tags.yaml" "tag registry"
+check_exists "$REPO_ROOT/registry/routing.yaml" "routing config"
+check_exists "$REPO_ROOT/registry/task_contracts.yaml" "task contracts"
 check_exists "$REPO_ROOT/playbooks/variant-effect/README.md" "variant-effect playbook"
 check_exists "$REPO_ROOT/playbooks/embedding/README.md" "embedding playbook"
 check_exists "$REPO_ROOT/playbooks/fine-tuning/README.md" "fine-tuning playbook"
@@ -149,14 +162,15 @@ check_exists "$REPO_ROOT/scripts/lib_registry.sh" "registry helper library"
 check_exists "$REPO_ROOT/scripts/validate_registry.sh" "validate_registry.sh"
 check_exists "$REPO_ROOT/scripts/validate_skill_metadata.sh" "validate_skill_metadata.sh"
 check_exists "$REPO_ROOT/scripts/validate_routing.sh" "validate_routing.sh"
+check_exists "$REPO_ROOT/scripts/validate_migration_paths.sh" "validate_migration_paths.sh"
 check_exists "$REPO_ROOT/scripts/route_query.sh" "route_query.sh"
 check_exists "$REPO_ROOT/scripts/run_agent.sh" "run_agent.sh"
 check_exists "$REPO_ROOT/scripts/agent_console.sh" "agent_console.sh"
-check_exists "$REPO_ROOT/dnabert2/scripts/validate_dataset_csv.py" "DNABERT2 dataset validator"
-check_exists "$REPO_ROOT/dnabert2/scripts/recommend_max_length.py" "DNABERT2 max-length helper"
-check_exists "$REPO_ROOT/nucleotide-transformer-v3/scripts/check_valid_length.py" "NTv3 helper script"
-check_exists "$REPO_ROOT/nucleotide-transformer-v3/scripts/run_track_prediction.py" "NTv3 track prediction script"
-check_exists "$REPO_ROOT/segment-nt/scripts/compute_rescaling_factor.py" "SegmentNT helper script"
+check_exists "$(skill_file_path dnabert2 scripts/validate_dataset_csv.py)" "DNABERT2 dataset validator"
+check_exists "$(skill_file_path dnabert2 scripts/recommend_max_length.py)" "DNABERT2 max-length helper"
+check_exists "$(skill_file_path nucleotide-transformer-v3 scripts/check_valid_length.py)" "NTv3 helper script"
+check_exists "$(skill_file_path nucleotide-transformer-v3 scripts/run_track_prediction.py)" "NTv3 track prediction script"
+check_exists "$(skill_file_path segment-nt scripts/compute_rescaling_factor.py)" "SegmentNT helper script"
 
 for skill in "${SKILL_IDS[@]}"; do
   skill_path="$(registry_get_path "$registry_file" "$skill" || true)"
@@ -203,14 +217,14 @@ run_import_check \
   "$evo2_python" \
   'from evo2 import Evo2'
 
-if python3 "$REPO_ROOT/nucleotide-transformer-v3/scripts/check_valid_length.py" 32768 >/dev/null; then
+if python3 "$(skill_file_path nucleotide-transformer-v3 scripts/check_valid_length.py)" 32768 >/dev/null; then
   echo "ok: NTv3 helper script"
 else
   echo "fail: NTv3 helper script" >&2
   failures=$((failures + 1))
 fi
 
-if python3 "$REPO_ROOT/segment-nt/scripts/compute_rescaling_factor.py" --sequence-length-bp 40008 >/dev/null; then
+if python3 "$(skill_file_path segment-nt scripts/compute_rescaling_factor.py)" --sequence-length-bp 40008 >/dev/null; then
   echo "ok: SegmentNT helper script"
 else
   echo "fail: SegmentNT helper script" >&2
@@ -225,6 +239,14 @@ else
   failures=$((failures + 1))
 fi
 
+route_clarify_output="$(bash "$REPO_ROOT/scripts/route_query.sh" --query "Train a model on fasta labels." || true)"
+if printf '%s\n' "$route_clarify_output" | grep -q '^decision: clarify$'; then
+  echo "ok: route query clarify behavior"
+else
+  echo "fail: route query clarify behavior" >&2
+  failures=$((failures + 1))
+fi
+
 if bash "$REPO_ROOT/scripts/validate_routing.sh" >/dev/null; then
   echo "ok: validate routing eval"
 else
@@ -236,6 +258,13 @@ if bash "$REPO_ROOT/scripts/validate_skill_metadata.sh" >/dev/null; then
   echo "ok: validate skill metadata"
 else
   echo "fail: validate skill metadata" >&2
+  failures=$((failures + 1))
+fi
+
+if bash "$REPO_ROOT/scripts/validate_migration_paths.sh" >/dev/null; then
+  echo "ok: validate migration paths"
+else
+  echo "fail: validate migration paths" >&2
   failures=$((failures + 1))
 fi
 

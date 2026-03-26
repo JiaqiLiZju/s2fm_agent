@@ -20,7 +20,7 @@ ifeq ($(FORCE_LINKS),1)
 BOOTSTRAP_FLAGS += --force-links
 endif
 
-.PHONY: help link-skills validate-registry validate-skill-metadata validate-agent eval-routing route-query run-agent agent-console bootstrap bootstrap-ntv3-hf bootstrap-borzoi bootstrap-evo2-light bootstrap-evo2-full smoke
+.PHONY: help link-skills validate-registry validate-skill-metadata validate-migration-paths validate-agent eval-routing route-query run-agent agent-console bootstrap bootstrap-ntv3-hf bootstrap-borzoi bootstrap-evo2-light bootstrap-evo2-full smoke
 
 help:
 	@printf '%s\n' \
@@ -28,6 +28,7 @@ help:
 	  '  make link-skills           Link all packaged skills into the Codex skills dir' \
 	  '  make validate-registry     Validate registry entries against local skill package paths' \
 	  '  make validate-skill-metadata Validate skill.yaml completeness and registry consistency' \
+	  '  make validate-migration-paths Validate selected migrated skills paths and compatibility symlinks' \
 	  '  make validate-agent        Run registry + skill metadata + routing validations' \
 	  '  make eval-routing          Evaluate routing behavior using eval cases and registry metadata' \
 	  '  make route-query           Route one query (set QUERY=... and optional TASK=...)' \
@@ -59,10 +60,14 @@ validate-registry:
 validate-skill-metadata:
 	bash $(REPO_ROOT)/scripts/validate_skill_metadata.sh
 
+validate-migration-paths:
+	bash $(REPO_ROOT)/scripts/validate_migration_paths.sh
+
 validate-agent:
 	bash $(REPO_ROOT)/scripts/validate_registry.sh
 	bash $(REPO_ROOT)/scripts/validate_skill_metadata.sh
 	bash $(REPO_ROOT)/scripts/validate_routing.sh
+	bash $(REPO_ROOT)/scripts/validate_migration_paths.sh
 
 eval-routing:
 	bash $(REPO_ROOT)/scripts/validate_routing.sh

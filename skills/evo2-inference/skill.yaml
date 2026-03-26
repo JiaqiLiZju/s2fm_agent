@@ -1,7 +1,7 @@
 schema_version: 1
 id: evo2-inference
 title: Evo 2 Inference
-path: evo2-inference
+path: skills/evo2-inference
 status: active
 family: genome-language-model-inference
 tasks:

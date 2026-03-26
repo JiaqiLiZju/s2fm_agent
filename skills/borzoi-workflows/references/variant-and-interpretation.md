@@ -31,10 +31,32 @@ Score semantics:
 Latest tutorial note:
 
 - Uses Mini Borzoi from tutorial training flow and is weaker than published pretrained Borzoi.
+- For fast-tier real inference outside tutorial reproduction, prefer `mini/human_gtex` for generic human RNA tasks; use `k562_*` only when K562 is explicitly requested.
 
 Legacy tutorial difference:
 
 - Uses published pretrained Borzoi and includes old-transform activation flag (`-u`) in script flows.
+
+## Coordinate and variant conventions
+
+Use explicit coordinate conventions in answers and outputs:
+
+- VCF SNP position is 1-based.
+- Python sequence indexing into fetched windows is 0-based.
+- Record both input sequence window and model output window (post-cropping) when reporting track positions.
+
+When users provide rule-based edits (for example, "mutate to G, if ref is G mutate to T"), resolve reference base first and then derive ALT deterministically.
+
+## Fast-tier output contract for single-site prediction
+
+For direct real prediction tasks, recommend writing:
+
+- `trackplot` figure (`.png`)
+- variant effect table (`.tsv`)
+- raw prediction arrays (`.npz` or `.h5`)
+- run metadata (`.json`) including model name, assembly, window coordinates, and resolved REF/ALT
+
+See `references/real-inference-fastpath.md` for a concrete lightweight execution pattern.
 
 ## Sequence interpretation gradients
 

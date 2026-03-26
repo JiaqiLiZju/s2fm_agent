@@ -1,0 +1,12 @@
+schema_version: 1
+wave_id: wave1_namespace_migration
+updated_at: "2026-03-27"
+description: "Migrate selected skills into skills/ namespace and remove legacy root paths."
+skills:
+  - alphagenome-api
+  - borzoi-workflows
+  - nucleotide-transformer-v3
+  - gpn-models
+  - evo2-inference
+  - dnabert2
+  - segment-nt

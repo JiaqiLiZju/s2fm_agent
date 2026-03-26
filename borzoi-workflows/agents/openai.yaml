@@ -1,4 +1,0 @@
-interface:
-  display_name: "Borzoi Workflows"
-  short_description: "Borzoi setup, training, and variant workflows"
-  default_prompt: "Use $borzoi-workflows to help me set up Borzoi and run a latest-tutorial workflow for training or variant scoring."

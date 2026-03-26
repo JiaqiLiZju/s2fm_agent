@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: "2026-03-26"
+updated_at: "2026-03-27"
 cases:
   - id: route_001
     query: "Use $dnabert2 to validate my train/dev/test CSV and suggest model_max_length."
@@ -43,3 +43,33 @@ cases:
     expected_primary_skill: segment-nt
     expected_secondary_skills: []
     task: segmentation-inference
+  - id: route_009
+    query: "Use borzoi and gpn to compare variant scoring."
+    expected_primary_skill: borzoi-workflows
+    expected_secondary_skills:
+      - gpn-models
+    task: variant-effect
+  - id: route_010
+    query: "How do I set up Evo2 on macOS without NVIDIA GPU?"
+    expected_primary_skill: evo2-inference
+    expected_secondary_skills:
+      - alphagenome-api
+    expected_decision: route
+  - id: route_011
+    query: "Train a model on fasta labels."
+    expected_decision: clarify
+    expected_clarify_contains: "which skill should lead"
+  - id: route_012
+    query: "Hello, can you help?"
+    expected_decision: clarify
+    expected_clarify_contains: "which task do you want"
+  - id: route_013
+    query: "Use borzoi fast tier with mini/human_gtex for real hg38 track prediction on chr19."
+    expected_primary_skill: borzoi-workflows
+    expected_secondary_skills: []
+    task: track-prediction
+  - id: route_014
+    query: "Use $borzoi-workflows to run predict_variant on hg38 chr12 single site, mutate to G unless ref is G then use T, and output trackplot plus TSV."
+    expected_primary_skill: borzoi-workflows
+    expected_secondary_skills: []
+    task: variant-effect

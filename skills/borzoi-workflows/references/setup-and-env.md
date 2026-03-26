@@ -45,6 +45,26 @@ Notebook users should install Jupyter:
 pip install notebook
 ```
 
+## Environment preflight (run before long jobs)
+
+Use these checks to fail fast before model downloads or long inference:
+
+```bash
+python -V
+python -c "import tensorflow as tf; print(tf.__version__)"
+python -c "import borzoi, baskerville, pysam; print('imports_ok')"
+```
+
+If these fail, fix environment consistency first.
+
+## Multi-conda safety notes
+
+When multiple conda installations exist, avoid ambiguous interpreter resolution:
+
+- Prefer invoking the target environment python with absolute path (for example, `<env>/bin/python script.py`).
+- If `conda run -n <env> ...` behaves inconsistently, validate `CONDA_EXE`, `CONDA_PREFIX`, and env ownership.
+- Keep one active Borzoi environment (`borzoi_py310`) as the source of truth for all runtime commands.
+
 ## Environment variables
 
 Borzoi docs provide an `env_vars.sh` script in each repository. It configures:
@@ -72,6 +92,8 @@ This script downloads:
 - hg38 gene annotations (GTF/BED/GFF)
 - helper annotation tables
 - hg38 FASTA plus indexing
+
+For fast-tier real inference with lower download overhead, use mini model assets and task-local sequence retrieval (see `references/real-inference-fastpath.md`).
 
 ## Data and compute caveats
 

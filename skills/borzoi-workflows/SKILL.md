@@ -26,28 +26,35 @@ Use this skill for the TensorFlow-based `calico/borzoi` repository workflows and
 - Install `westminster` when training/data-prep scripts require it.
 - If notebooks are requested, include `jupyter`/`notebook` installation.
 
-4. Align data and model assets to the task.
-- For published-model variant workflows, run `download_models.sh` first.
+4. Pick an inference tier explicitly for real-world prediction requests.
+- `full`: published pretrained Borzoi + local genome/annotation assets via `download_models.sh`. Use when users request paper-grade published weights and can afford larger downloads/runtime.
+- `fast`: Mini Borzoi + task-local sequence retrieval and minimal assets. Use when users need real prediction output but have runtime/bandwidth constraints.
+- `offline`: reuse already-downloaded local model/FASTA assets without network access.
+
+5. Align data and model assets to the selected tier.
+- For `full` published-model workflows, run `download_models.sh` first.
+- For `fast` human workflows, prefer `mini/human_gtex` (or `mini/human_all`) by default; use `k562_*` only when user explicitly asks for K562-focused outputs.
 - For training-data requests, call out that the full data bucket is multi-TB and requester-pays.
 - Keep organism/build explicit (`hg38` vs `mm10`) and verify targets files used by scripts.
 
-5. Use the tutorial script entry points directly.
+6. Use the tutorial script entry points directly.
 - Data processing: `tutorials/latest/make_data`.
 - Training: `tutorials/latest/train_model`.
 - Variant scoring: `tutorials/latest/score_variants` (or `legacy` with published model).
 - Interpretation gradients: `tutorials/latest/interpret_sequence` (or `legacy` variants).
 - Indel/SV/STR analysis: `tutorials/latest/analyze_sv`.
 
-6. Explain score semantics precisely.
+7. Explain score semantics precisely.
 - Expression: `logSED`, `logD2`.
 - Polyadenylation: `COVR`.
 - Splicing: `nDi`.
 - Distinguish gene-specific vs gene-agnostic outputs when summarizing results.
 
-7. Surface operational caveats early.
+8. Surface operational caveats early.
 - Some scripts assume SLURM/multiprocess environments.
 - Tutorial scripts are minimal examples and not full benchmark pipelines.
 - Legacy scripts may require old-transform flags (`-u` or `--untransform_old`).
+- Sequence-window and output-window coordinates can differ after model cropping; include both in outputs.
 
 ## Grounded Command Surface
 
@@ -83,6 +90,7 @@ Do not invent alternate Borzoi wrappers, hidden APIs, or unsupported benchmark c
 - Prefer the smallest runnable script sequence first.
 - State whether the path is `latest` or `legacy`.
 - Label clearly when examples use tutorial Mini/Micro models instead of the published pretrained model.
+- For constrained runtime paths, label explicitly as `fast` tier and include the model chosen.
 - If users ask for SegmentBorzoi segmentation APIs, route them to `segment-nt`.
 
 ## References
@@ -90,3 +98,4 @@ Do not invent alternate Borzoi wrappers, hidden APIs, or unsupported benchmark c
 - Read [references/setup-and-env.md](references/setup-and-env.md) for installation, versions, and environment variables.
 - Read [references/tutorial-playbooks.md](references/tutorial-playbooks.md) for end-to-end latest tutorial command flow.
 - Read [references/variant-and-interpretation.md](references/variant-and-interpretation.md) for score semantics and legacy-vs-latest behavior.
+- Read [references/real-inference-fastpath.md](references/real-inference-fastpath.md) for low-overhead real prediction and single-site variant execution patterns.

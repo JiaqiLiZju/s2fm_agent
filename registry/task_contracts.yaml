@@ -1,0 +1,45 @@
+schema_version: 1
+updated_at: "2026-03-26"
+contracts:
+  environment-setup:
+    required_inputs:
+      - target-stack-or-model-family
+      - runtime-context
+      - hardware-context
+  embedding:
+    required_inputs:
+      - sequence-or-interval
+      - embedding-target
+  variant-effect:
+    required_inputs:
+      - assembly
+      - coordinate-or-interval
+      - ref-alt-or-variant-spec
+  fine-tuning:
+    required_inputs:
+      - task-objective
+      - dataset-schema
+      - compute-constraints
+  track-prediction:
+    required_inputs:
+      - species
+      - assembly
+      - sequence-or-interval
+      - output-head
+  troubleshooting:
+    required_inputs:
+      - failing-step-or-error
+      - runtime-context
+  setup:
+    required_inputs:
+      - target-stack-or-model-family
+      - runtime-context
+      - hardware-context
+  loading:
+    required_inputs:
+      - model-family-objective
+      - runtime-context
+  framework-selection:
+    required_inputs:
+      - model-family-objective
+      - objective

@@ -4,11 +4,13 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEFAULT_REGISTRY_FILE="$REPO_ROOT/registry/skills.yaml"
 DEFAULT_TAGS_FILE="$REPO_ROOT/registry/tags.yaml"
+DEFAULT_ROUTING_FILE="$REPO_ROOT/registry/routing.yaml"
+DEFAULT_CONTRACTS_FILE="$REPO_ROOT/registry/task_contracts.yaml"
 DEFAULT_ROUTER_SCRIPT="$REPO_ROOT/scripts/route_query.sh"
 source "$REPO_ROOT/scripts/lib_registry.sh"
 
 usage() {
-  cat <<'EOF'
+  cat <<'EOF_USAGE'
 Usage: run_agent.sh [options]
 
 Run the s2f agent orchestration for one query:
@@ -18,15 +20,17 @@ Run the s2f agent orchestration for one query:
 - report required inputs and missing fields
 
 Options:
-  --query TEXT       Query text to process. If omitted, read from stdin.
-  --task TASK        Optional task hint.
-  --top-k N          Number of total candidates to include. Default: 3
-  --format FMT       Output format: text or json. Default: text
-  --registry FILE    Skill registry file. Default: <repo>/registry/skills.yaml
-  --tags FILE        Task tag registry file. Default: <repo>/registry/tags.yaml
-  --router FILE      Router script path. Default: <repo>/scripts/route_query.sh
-  -h, --help         Show this help message.
-EOF
+  --query TEXT           Query text to process. If omitted, read from stdin.
+  --task TASK            Optional task hint.
+  --top-k N              Number of total candidates to include. Default: 3
+  --format FMT           Output format: text or json. Default: text
+  --registry FILE        Skill registry file. Default: <repo>/registry/skills.yaml
+  --tags FILE            Task tag registry file. Default: <repo>/registry/tags.yaml
+  --routing-config FILE  Routing config for router. Default: <repo>/registry/routing.yaml
+  --contracts FILE       Task contracts file. Default: <repo>/registry/task_contracts.yaml
+  --router FILE          Router script path. Default: <repo>/scripts/route_query.sh
+  -h, --help             Show this help message.
+EOF_USAGE
 }
 
 to_lower() {
@@ -89,6 +93,7 @@ csv_to_lines_prefixed() {
   if [[ -z "$csv" ]]; then
     return 0
   fi
+  local -a arr=()
   IFS=',' read -r -a arr <<<"$csv"
   for item in "${arr[@]}"; do
     [[ -z "$item" ]] && continue
@@ -116,9 +121,9 @@ json_escape() {
   printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
 }
 
-extract_primary_skill_from_json() {
+extract_decision_from_json() {
   local json="$1"
-  printf '%s\n' "$json" | sed -n 's/.*"primary":{"skill":"\([^"]*\)".*/\1/p'
+  printf '%s\n' "$json" | sed -n 's/.*"decision":"\([^"]*\)".*/\1/p'
 }
 
 extract_task_from_json() {
@@ -133,6 +138,30 @@ extract_task_from_json() {
 extract_task_source_from_json() {
   local json="$1"
   printf '%s\n' "$json" | sed -n 's/.*"task_source":"\([^"]*\)".*/\1/p'
+}
+
+extract_confidence_level_from_json() {
+  local json="$1"
+  printf '%s\n' "$json" | sed -n 's/.*"confidence":{"level":"\([^"]*\)","score":[0-9.]*}.*/\1/p'
+}
+
+extract_confidence_score_from_json() {
+  local json="$1"
+  printf '%s\n' "$json" | sed -n 's/.*"confidence":{"level":"[^"]*","score":\([0-9.]*\)}.*/\1/p'
+}
+
+extract_clarify_question_from_json() {
+  local json="$1"
+  if printf '%s\n' "$json" | grep -q '"clarify_question":null'; then
+    printf '\n'
+    return 0
+  fi
+  printf '%s\n' "$json" | sed -n 's/.*"clarify_question":"\([^"]*\)".*/\1/p' | sed 's/\\"/"/g'
+}
+
+extract_primary_skill_from_json() {
+  local json="$1"
+  printf '%s\n' "$json" | sed -n 's/.*"primary":{"skill":"\([^"]*\)".*/\1/p'
 }
 
 extract_secondary_csv_from_json() {
@@ -172,6 +201,10 @@ input_satisfied() {
       contains_token "$query_lc" "sequence" || contains_token "$query_lc" "interval" || contains_token "$query_lc" "fasta" || contains_token "$query_lc" "chr"
       return
       ;;
+    embedding-target)
+      contains_token "$query_lc" "embedding" || contains_token "$query_lc" "token" || contains_token "$query_lc" "pooled" || contains_token "$query_lc" "representation"
+      return
+      ;;
     assembly)
       contains_token "$query_lc" "assembly" || contains_token "$query_lc" "hg38" || contains_token "$query_lc" "hg19" || contains_token "$query_lc" "mm10" || contains_token "$query_lc" "chm13"
       return
@@ -180,16 +213,52 @@ input_satisfied() {
       contains_token "$query_lc" "chr"
       return
       ;;
-    interval-or-variant)
-      contains_token "$query_lc" "variant" || contains_token "$query_lc" "interval" || contains_token "$query_lc" "chr"
+    coordinate-or-interval|interval-or-variant)
+      contains_token "$query_lc" "position" || contains_token "$query_lc" "variant" || contains_token "$query_lc" "interval" || contains_token "$query_lc" "chr"
+      return
+      ;;
+    ref-alt-or-variant-spec)
+      contains_token "$query_lc" "ref" || contains_token "$query_lc" "alt" || contains_token "$query_lc" "a>" || contains_token "$query_lc" "g>" || contains_token "$query_lc" "variant"
       return
       ;;
     hardware-context)
-      contains_token "$query_lc" "gpu" || contains_token "$query_lc" "cuda" || contains_token "$query_lc" "nvidia" || contains_token "$query_lc" "h100" || contains_token "$query_lc" "cpu"
+      contains_token "$query_lc" "gpu" || contains_token "$query_lc" "cuda" || contains_token "$query_lc" "nvidia" || contains_token "$query_lc" "h100" || contains_token "$query_lc" "cpu" || contains_token "$query_lc" "mac"
       return
       ;;
     execution-path)
       contains_token "$query_lc" "local" || contains_token "$query_lc" "hosted" || contains_token "$query_lc" "api" || contains_token "$query_lc" "nim" || contains_token "$query_lc" "docker"
+      return
+      ;;
+    runtime-context)
+      contains_token "$query_lc" "linux" || contains_token "$query_lc" "mac" || contains_token "$query_lc" "wsl" || contains_token "$query_lc" "windows" || contains_token "$query_lc" "docker" || contains_token "$query_lc" "conda"
+      return
+      ;;
+    target-stack-or-model-family)
+      contains_token "$query_lc" "stack" || contains_token "$query_lc" "model" || contains_token "$query_lc" "family" || contains_token "$query_lc" "ntv3" || contains_token "$query_lc" "evo2" || contains_token "$query_lc" "gpn" || contains_token "$query_lc" "alphagenome"
+      return
+      ;;
+    task-objective|objective|model-family-objective)
+      contains_token "$query_lc" "classification" || contains_token "$query_lc" "regression" || contains_token "$query_lc" "objective" || contains_token "$query_lc" "variant" || contains_token "$query_lc" "embedding" || contains_token "$query_lc" "prediction"
+      return
+      ;;
+    dataset-schema)
+      contains_token "$query_lc" "csv" || contains_token "$query_lc" "schema" || contains_token "$query_lc" "columns" || contains_token "$query_lc" "label" || contains_token "$query_lc" "fasta"
+      return
+      ;;
+    compute-constraints)
+      contains_token "$query_lc" "gpu" || contains_token "$query_lc" "memory" || contains_token "$query_lc" "runtime" || contains_token "$query_lc" "budget" || contains_token "$query_lc" "batch"
+      return
+      ;;
+    failing-step-or-error)
+      contains_token "$query_lc" "error" || contains_token "$query_lc" "fail" || contains_token "$query_lc" "issue" || contains_token "$query_lc" "traceback" || contains_token "$query_lc" "loading" || contains_token "$query_lc" "cannot"
+      return
+      ;;
+    output-head)
+      contains_token "$query_lc" "head" || contains_token "$query_lc" "track" || contains_token "$query_lc" "output"
+      return
+      ;;
+    species)
+      contains_token "$query_lc" "human" || contains_token "$query_lc" "mouse" || contains_token "$query_lc" "species"
       return
       ;;
   esac
@@ -217,6 +286,8 @@ top_k=3
 format="text"
 registry_file="$DEFAULT_REGISTRY_FILE"
 tags_file="$DEFAULT_TAGS_FILE"
+routing_file="$DEFAULT_ROUTING_FILE"
+contracts_file="$DEFAULT_CONTRACTS_FILE"
 router_script="$DEFAULT_ROUTER_SCRIPT"
 
 while [[ $# -gt 0 ]]; do
@@ -243,6 +314,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --tags)
       tags_file="$2"
+      shift 2
+      ;;
+    --routing-config)
+      routing_file="$2"
+      shift 2
+      ;;
+    --contracts)
+      contracts_file="$2"
       shift 2
       ;;
     --router)
@@ -283,13 +362,15 @@ fi
 
 registry_require_file "$registry_file"
 registry_require_file "$tags_file"
+registry_require_file "$routing_file"
+registry_require_file "$contracts_file"
 if [[ ! -f "$router_script" ]]; then
   echo "error: router script not found: $router_script" >&2
   exit 1
 fi
 
 router_json=""
-router_cmd=(bash "$router_script" --registry "$registry_file" --tags "$tags_file" --query "$query" --top-k "$top_k" --format json)
+router_cmd=(bash "$router_script" --registry "$registry_file" --tags "$tags_file" --routing-config "$routing_file" --query "$query" --top-k "$top_k" --format json)
 if [[ -n "$task" ]]; then
   router_cmd+=(--task "$task")
 fi
@@ -299,9 +380,68 @@ if ! router_json="$("${router_cmd[@]}" 2>&1)"; then
   exit 1
 fi
 
-primary_skill="$(extract_primary_skill_from_json "$router_json")"
+decision="$(extract_decision_from_json "$router_json")"
 effective_task="$(extract_task_from_json "$router_json")"
 task_source="$(extract_task_source_from_json "$router_json")"
+confidence_level="$(extract_confidence_level_from_json "$router_json")"
+confidence_score="$(extract_confidence_score_from_json "$router_json")"
+clarify_question="$(extract_clarify_question_from_json "$router_json")"
+
+if [[ -z "$decision" ]]; then
+  echo "error: failed to parse routing decision from router output: $router_json" >&2
+  exit 1
+fi
+
+if [[ "$decision" == "clarify" ]]; then
+  if [[ "$format" == "text" ]]; then
+    echo "query: $query"
+    if [[ -n "$effective_task" ]]; then
+      echo "task: $effective_task ($task_source)"
+    else
+      echo "task: none ($task_source)"
+    fi
+    echo "decision: clarify"
+    echo "confidence: ${confidence_level:-unknown} (${confidence_score:-0})"
+    echo "clarify_question: ${clarify_question:-Please specify task or preferred skill.}"
+    exit 0
+  fi
+
+  printf '{'
+  printf '"query":"%s",' "$(json_escape "$query")"
+  if [[ -n "$effective_task" ]]; then
+    printf '"task":"%s",' "$(json_escape "$effective_task")"
+  else
+    printf '"task":null,'
+  fi
+  printf '"task_source":"%s",' "$(json_escape "$task_source")"
+  printf '"decision":"clarify",'
+  printf '"confidence":{'
+  printf '"level":"%s",' "$(json_escape "$confidence_level")"
+  printf '"score":%s' "${confidence_score:-0}"
+  printf '},'
+  if [[ -n "$clarify_question" ]]; then
+    printf '"clarify_question":"%s",' "$(json_escape "$clarify_question")"
+  else
+    printf '"clarify_question":"%s",' "Please specify task or preferred skill."
+  fi
+  printf '"playbook":null,'
+  printf '"primary_skill":null,'
+  printf '"primary_skill_path":null,'
+  printf '"skill_doc":null,'
+  printf '"skill_metadata":null,'
+  printf '"secondary_skills":[],'
+  printf '"required_inputs":[],'
+  printf '"required_inputs_source":null,'
+  printf '"provided_inputs":[],'
+  printf '"missing_inputs":[],'
+  printf '"constraints":[],'
+  printf '"tools":[],'
+  printf '"next_prompt":"%s"' "$(json_escape "Ask one focused clarification question before selecting a skill.")"
+  printf '}\n'
+  exit 0
+fi
+
+primary_skill="$(extract_primary_skill_from_json "$router_json")"
 secondary_csv="$(extract_secondary_csv_from_json "$router_json")"
 
 if [[ -z "$primary_skill" ]]; then
@@ -317,13 +457,32 @@ skill_root="$REPO_ROOT/$skill_path"
 skill_meta="$skill_root/skill.yaml"
 skill_doc="$skill_root/SKILL.md"
 
+skill_required_csv=""
 required_csv=""
+required_inputs_source="skill"
 constraints_csv=""
 tools_csv=""
 
 while IFS= read -r v; do
-  [[ -n "$v" ]] && required_csv="$(append_csv "$required_csv" "$v")"
+  [[ -n "$v" ]] && skill_required_csv="$(append_csv "$skill_required_csv" "$v")"
 done < <(yaml_get_list_field "$skill_meta" "required_inputs")
+
+required_csv="$skill_required_csv"
+if [[ -n "$effective_task" ]]; then
+  task_required_csv=""
+  while IFS= read -r v; do
+    [[ -n "$v" ]] && task_required_csv="$(append_csv "$task_required_csv" "$v")"
+  done < <(task_contract_list_required_inputs "$contracts_file" "$effective_task")
+
+  if [[ -n "$task_required_csv" ]]; then
+    required_csv="$task_required_csv"
+    required_inputs_source="task-contract:$effective_task"
+  else
+    required_inputs_source="skill:$primary_skill"
+  fi
+else
+  required_inputs_source="skill:$primary_skill"
+fi
 
 while IFS= read -r v; do
   [[ -n "$v" ]] && constraints_csv="$(append_csv "$constraints_csv" "$v")"
@@ -365,6 +524,8 @@ if [[ "$format" == "text" ]]; then
   else
     echo "task: none ($task_source)"
   fi
+  echo "decision: route"
+  echo "confidence: ${confidence_level:-unknown} (${confidence_score:-0})"
   echo "primary_skill: $primary_skill"
   echo "primary_skill_path: $skill_path"
   echo "skill_doc: $skill_path/SKILL.md"
@@ -383,9 +544,11 @@ if [[ "$format" == "text" ]]; then
   fi
 
   if [[ -n "$required_csv" ]]; then
+    echo "required_inputs_source: $required_inputs_source"
     echo "required_inputs:"
     csv_to_lines_prefixed "$required_csv" "- "
   else
+    echo "required_inputs_source: none"
     echo "required_inputs: none"
   fi
 
@@ -429,6 +592,12 @@ else
   printf '"task":null,'
 fi
 printf '"task_source":"%s",' "$(json_escape "$task_source")"
+printf '"decision":"route",'
+printf '"confidence":{'
+printf '"level":"%s",' "$(json_escape "$confidence_level")"
+printf '"score":%s' "${confidence_score:-0}"
+printf '},'
+printf '"clarify_question":null,'
 printf '"primary_skill":"%s",' "$(json_escape "$primary_skill")"
 printf '"primary_skill_path":"%s",' "$(json_escape "$skill_path")"
 printf '"skill_doc":"%s",' "$(json_escape "$skill_doc")"
@@ -444,6 +613,7 @@ printf ','
 printf '"required_inputs":'
 emit_json_array_from_csv "${required_csv:-}"
 printf ','
+printf '"required_inputs_source":"%s",' "$(json_escape "$required_inputs_source")"
 printf '"provided_inputs":'
 emit_json_array_from_csv "${provided_csv:-}"
 printf ','

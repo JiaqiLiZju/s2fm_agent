@@ -4,27 +4,30 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEFAULT_REGISTRY_FILE="$REPO_ROOT/registry/skills.yaml"
 DEFAULT_TAGS_FILE="$REPO_ROOT/registry/tags.yaml"
+DEFAULT_ROUTING_FILE="$REPO_ROOT/registry/routing.yaml"
 DEFAULT_CASES_FILE="$REPO_ROOT/evals/routing/cases.yaml"
 DEFAULT_ROUTER_SCRIPT="$REPO_ROOT/scripts/route_query.sh"
 source "$REPO_ROOT/scripts/lib_registry.sh"
 
 usage() {
-  cat <<'EOF'
+  cat <<'EOF_USAGE'
 Usage: validate_routing.sh [options]
 
 Evaluate routing quality against eval cases by invoking the runtime router.
 
 Options:
-  --registry FILE    Skill registry file. Default: <repo>/registry/skills.yaml
-  --tags FILE        Task tag registry file. Default: <repo>/registry/tags.yaml
-  --cases FILE       Routing eval case file. Default: <repo>/evals/routing/cases.yaml
-  --router FILE      Router script path. Default: <repo>/scripts/route_query.sh
-  -h, --help         Show this help message.
-EOF
+  --registry FILE        Skill registry file. Default: <repo>/registry/skills.yaml
+  --tags FILE            Task tag registry file. Default: <repo>/registry/tags.yaml
+  --routing-config FILE  Routing config file. Default: <repo>/registry/routing.yaml
+  --cases FILE           Routing eval case file. Default: <repo>/evals/routing/cases.yaml
+  --router FILE          Router script path. Default: <repo>/scripts/route_query.sh
+  -h, --help             Show this help message.
+EOF_USAGE
 }
 
 registry_file="$DEFAULT_REGISTRY_FILE"
 tags_file="$DEFAULT_TAGS_FILE"
+routing_file="$DEFAULT_ROUTING_FILE"
 cases_file="$DEFAULT_CASES_FILE"
 router_script="$DEFAULT_ROUTER_SCRIPT"
 
@@ -36,6 +39,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --tags)
       tags_file="$2"
+      shift 2
+      ;;
+    --routing-config)
+      routing_file="$2"
       shift 2
       ;;
     --cases)
@@ -60,6 +67,7 @@ done
 
 registry_require_file "$registry_file"
 registry_require_file "$tags_file"
+registry_require_file "$routing_file"
 registry_require_file "$cases_file"
 if [[ ! -f "$router_script" ]]; then
   echo "error: router script not found: $router_script" >&2
@@ -77,6 +85,8 @@ parse_eval_cases() {
       expected_primary = ""
       expected_secondary = ""
       task = ""
+      expected_decision = ""
+      expected_clarify_contains = ""
       in_secondary = 0
     }
     function trim(s) {
@@ -93,7 +103,7 @@ parse_eval_cases() {
     }
     function emit_case() {
       if (case_id != "") {
-        print case_id, query, expected_primary, expected_secondary, task
+        print case_id, query, expected_primary, expected_secondary, task, expected_decision, expected_clarify_contains
       }
     }
     /^[[:space:]]*-[[:space:]]id:[[:space:]]*/ {
@@ -105,6 +115,8 @@ parse_eval_cases() {
       expected_primary = ""
       expected_secondary = ""
       task = ""
+      expected_decision = ""
+      expected_clarify_contains = ""
       in_secondary = 0
       next
     }
@@ -152,6 +164,20 @@ parse_eval_cases() {
       in_secondary = 0
       next
     }
+    /^[[:space:]]*expected_decision:[[:space:]]*/ {
+      expected_decision = $0
+      sub(/^[[:space:]]*expected_decision:[[:space:]]*/, "", expected_decision)
+      expected_decision = unquote(expected_decision)
+      in_secondary = 0
+      next
+    }
+    /^[[:space:]]*expected_clarify_contains:[[:space:]]*/ {
+      expected_clarify_contains = $0
+      sub(/^[[:space:]]*expected_clarify_contains:[[:space:]]*/, "", expected_clarify_contains)
+      expected_clarify_contains = unquote(expected_clarify_contains)
+      in_secondary = 0
+      next
+    }
     END {
       emit_case()
     }
@@ -191,6 +217,20 @@ append_csv() {
   fi
 }
 
+extract_decision_from_json() {
+  local json="$1"
+  printf '%s\n' "$json" | sed -n 's/.*"decision":"\([^"]*\)".*/\1/p'
+}
+
+extract_clarify_question_from_json() {
+  local json="$1"
+  if printf '%s\n' "$json" | grep -q '"clarify_question":null'; then
+    printf '\n'
+    return 0
+  fi
+  printf '%s\n' "$json" | sed -n 's/.*"clarify_question":"\([^"]*\)".*/\1/p' | sed 's/\\"/"/g'
+}
+
 extract_primary_skill_from_json() {
   local json="$1"
   printf '%s\n' "$json" | sed -n 's/.*"primary":{"skill":"\([^"]*\)".*/\1/p'
@@ -222,6 +262,10 @@ extract_secondary_csv_from_json() {
   printf '%s\n' "$csv"
 }
 
+to_lower() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+}
+
 num_skills=0
 while IFS= read -r _sid; do
   [[ -n "$_sid" ]] && num_skills=$((num_skills + 1))
@@ -236,22 +280,72 @@ total_cases=0
 pass_cases=0
 fail_cases=0
 
-while IFS=$'\x1f' read -r case_id query expected_primary expected_secondary task_name; do
+while IFS=$'\x1f' read -r case_id query expected_primary expected_secondary task_name expected_decision expected_clarify_contains; do
   [[ -z "$case_id" ]] && continue
   total_cases=$((total_cases + 1))
 
+  expected_decision="${expected_decision:-route}"
+  if [[ -z "$expected_decision" ]]; then
+    expected_decision="route"
+  fi
+
   route_json=""
-  if ! route_json="$(bash "$router_script" \
+  router_cmd=(bash "$router_script" \
     --registry "$registry_file" \
     --tags "$tags_file" \
+    --routing-config "$routing_file" \
     --query "$query" \
-    --task "$task_name" \
     --top-k "$num_skills" \
-    --format json 2>&1)"; then
+    --format json)
+  if [[ -n "$task_name" ]]; then
+    router_cmd+=(--task "$task_name")
+  fi
+
+  if ! route_json="$("${router_cmd[@]}" 2>&1)"; then
     fail_cases=$((fail_cases + 1))
     echo "fail: $case_id (router execution failed)" >&2
     echo "  query: $query" >&2
     echo "  router_error: $route_json" >&2
+    continue
+  fi
+
+  predicted_decision="$(extract_decision_from_json "$route_json")"
+
+  if [[ "$expected_decision" == "clarify" ]]; then
+    clarify_ok=1
+    if [[ "$predicted_decision" != "clarify" ]]; then
+      clarify_ok=0
+    fi
+
+    if [[ "$clarify_ok" -eq 1 && -n "$expected_clarify_contains" ]]; then
+      predicted_question="$(extract_clarify_question_from_json "$route_json")"
+      expected_lc="$(to_lower "$expected_clarify_contains")"
+      predicted_lc="$(to_lower "$predicted_question")"
+      if [[ "$predicted_lc" != *"$expected_lc"* ]]; then
+        clarify_ok=0
+      fi
+    fi
+
+    if [[ "$clarify_ok" -eq 1 ]]; then
+      pass_cases=$((pass_cases + 1))
+      echo "pass: $case_id (decision=clarify)"
+    else
+      fail_cases=$((fail_cases + 1))
+      echo "fail: $case_id" >&2
+      echo "  expected decision: clarify" >&2
+      echo "  predicted decision: ${predicted_decision:-none}" >&2
+      echo "  expected clarify contains: ${expected_clarify_contains:-none}" >&2
+      echo "  router_output: $route_json" >&2
+    fi
+    continue
+  fi
+
+  if [[ "$predicted_decision" != "route" ]]; then
+    fail_cases=$((fail_cases + 1))
+    echo "fail: $case_id" >&2
+    echo "  expected decision: route" >&2
+    echo "  predicted decision: ${predicted_decision:-none}" >&2
+    echo "  router_output: $route_json" >&2
     continue
   fi
 

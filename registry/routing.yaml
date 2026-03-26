@@ -1,0 +1,51 @@
+schema_version: 1
+updated_at: "2026-03-26"
+
+weight_explicit_skill_mention: 120
+weight_skill_id_mention: 80
+weight_trigger_match: 25
+weight_task_alignment: 20
+
+infer_phrase_exact_base: 60
+infer_phrase_exact_term_bonus: 12
+infer_task_key_bonus: 35
+infer_token_match: 8
+infer_skill_mention_in_task: 6
+infer_trigger_match_in_task: 4
+infer_trigger_match_cap: 3
+
+confidence_high_min_primary_score: 70
+confidence_high_min_margin: 25
+confidence_medium_min_primary_score: 35
+confidence_medium_min_margin: 10
+
+clarify_low_confidence_behavior: ask
+clarify_question: "I can route this better with one detail: which task do you want (environment-setup, embedding, variant-effect, fine-tuning, track-prediction, troubleshooting)?"
+
+task_alias_rules:
+  - set up=>environment-setup
+  - setup=>environment-setup
+  - install=>environment-setup
+  - bootstrap=>environment-setup
+  - environment=>environment-setup
+  - troubleshoot=>troubleshooting
+  - troubleshooting=>troubleshooting
+  - debug=>troubleshooting
+  - error=>troubleshooting
+  - failure=>troubleshooting
+  - fine tune=>fine-tuning
+  - fine-tune=>fine-tuning
+  - finetune=>fine-tuning
+  - train=>fine-tuning
+  - training=>fine-tuning
+  - embedding=>embedding
+  - embed=>embedding
+  - variant effect=>variant-effect
+  - variant-effect=>variant-effect
+  - variant scoring=>variant-effect
+  - ref alt=>variant-effect
+  - track prediction=>track-prediction
+  - sequence to track=>track-prediction
+  - model family=>framework-selection
+  - choose model=>framework-selection
+  - loading=>loading

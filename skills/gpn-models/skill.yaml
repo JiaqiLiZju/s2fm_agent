@@ -1,7 +1,7 @@
 schema_version: 1
 id: gpn-models
 title: GPN Models
-path: gpn-models
+path: skills/gpn-models
 status: active
 family: phylogenetic-language-models
 tasks:

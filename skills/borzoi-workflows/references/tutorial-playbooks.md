@@ -7,6 +7,7 @@ Use this file for grounded tutorial command sequences.
 - Prefer `tutorials/latest/*`.
 - Keep `legacy` only for manuscript-style transform compatibility.
 - Make clear that tutorials are minimal examples, not full paper benchmarking pipelines.
+- For user requests focused on direct real inference rather than tutorial reproduction, use `references/real-inference-fastpath.md`.
 
 ## Data processing (`latest/make_data`)
 
@@ -58,7 +59,7 @@ Install extra plotting dependency and run examples:
 pip install plotly
 cd ~/borzoi/tutorials/latest/analyze_sv
 bash download_dependencies_SV.sh
-python analyze_indel.sh
+bash analyze_indel.sh
 ```
 
 STR workflow:

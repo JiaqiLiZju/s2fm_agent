@@ -1,7 +1,7 @@
 schema_version: 1
 id: nucleotide-transformer-v3
 title: Nucleotide Transformer v3
-path: nucleotide-transformer-v3
+path: skills/nucleotide-transformer-v3
 status: active
 family: transformers-ntv3
 tasks:

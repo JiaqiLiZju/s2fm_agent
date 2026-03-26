@@ -190,3 +190,47 @@ tag_registry_list_tasks() {
     }
   ' "$tags_file"
 }
+
+task_contract_list_required_inputs() {
+  local contracts_file="$1"
+  local task_name="$2"
+  registry_require_file "$contracts_file"
+  awk -v target="$task_name" '
+    function cleaned(s) {
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+      gsub(/"/, "", s)
+      return s
+    }
+    /^[[:space:]]*contracts:[[:space:]]*$/ {
+      in_contracts = 1
+      next
+    }
+    in_contracts && $0 ~ ("^[[:space:]]{2}" target ":[[:space:]]*$") {
+      in_task = 1
+      in_required = 0
+      next
+    }
+    in_contracts && in_task && /^[[:space:]]{2}[a-zA-Z0-9_-]+:[[:space:]]*$/ {
+      in_task = 0
+      in_required = 0
+      next
+    }
+    in_task && /^[[:space:]]{4}required_inputs:[[:space:]]*$/ {
+      in_required = 1
+      next
+    }
+    in_task && in_required && /^[[:space:]]{6}-[[:space:]]*/ {
+      item = $0
+      sub(/^[[:space:]]{6}-[[:space:]]*/, "", item)
+      item = cleaned(item)
+      if (item != "") {
+        print item
+      }
+      next
+    }
+    in_task && in_required && /^[[:space:]]{4}[a-zA-Z0-9_-]+:[[:space:]]*/ {
+      in_required = 0
+      next
+    }
+  ' "$contracts_file"
+}

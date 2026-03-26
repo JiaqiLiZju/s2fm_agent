@@ -1,7 +1,7 @@
 schema_version: 1
 id: borzoi-workflows
 title: Borzoi Workflows
-path: borzoi-workflows
+path: skills/borzoi-workflows
 status: active
 family: sequence-to-signal
 tasks:

@@ -1,8 +1,8 @@
 schema_version: 1
-updated_at: "2026-03-26"
+updated_at: "2026-03-27"
 skills:
   - id: alphagenome-api
-    path: alphagenome-api
+    path: skills/alphagenome-api
     enabled: true
     family: api-variant-prediction
     tasks:
@@ -41,11 +41,12 @@ skills:
       - shap
       - motif
   - id: borzoi-workflows
-    path: borzoi-workflows
+    path: skills/borzoi-workflows
     enabled: true
     family: sequence-to-signal
     tasks:
       - setup
+      - track-prediction
       - variant-effect
       - interpretation
       - tutorial-playbooks
@@ -53,8 +54,9 @@ skills:
       - borzoi
       - westminster
       - baskerville
+      - human_gtex
   - id: dnabert2
-    path: dnabert2
+    path: skills/dnabert2
     enabled: true
     family: transformer-embedding-and-finetuning
     tasks:
@@ -67,7 +69,7 @@ skills:
       - zhihan1996/DNABERT-2-117M
       - gue
   - id: evo2-inference
-    path: evo2-inference
+    path: skills/evo2-inference
     enabled: true
     family: genome-language-model-inference
     tasks:
@@ -81,7 +83,7 @@ skills:
       - nvcf
       - flash-attn
   - id: gpn-models
-    path: gpn-models
+    path: skills/gpn-models
     enabled: true
     family: phylogenetic-language-models
     tasks:
@@ -107,7 +109,7 @@ skills:
       - nt-jax
       - 6-mer
   - id: nucleotide-transformer-v3
-    path: nucleotide-transformer-v3
+    path: skills/nucleotide-transformer-v3
     enabled: true
     family: transformers-ntv3
     tasks:
@@ -120,7 +122,7 @@ skills:
       - species-conditioning
       - post-trained
   - id: segment-nt
-    path: segment-nt
+    path: skills/segment-nt
     enabled: true
     family: segmentation-heads
     tasks:
