@@ -29,15 +29,24 @@ Use this skill for segmentation models built around the NT ecosystem. Prefer the
 - Use the same token-count naming as `$nucleotide-transformer`:
   - `num_tokens_inference`: includes CLS.
   - `num_dna_tokens_excluding_cls`: excludes CLS.
+- For no-`N` inputs, compute tokens exactly with:
+  - `num_dna_tokens_excluding_cls = floor(bp / 6) + (bp % 6)`
+  - `num_tokens_inference = num_dna_tokens_excluding_cls + 1`
 - For SegmentNT, `num_dna_tokens_excluding_cls` must be divisible by 4.
+- Practical input-length shortcut: choose `bp % 24 == 0` to satisfy divisibility cleanly.
 - For `SegmentNT` inference above 30 kb, compute the rescaling factor with [scripts/compute_rescaling_factor.py](scripts/compute_rescaling_factor.py).
 - The practical docs formula is `rescaling_factor = num_tokens_inference / 2048`, where inference token count includes CLS.
 
 4. Read outputs correctly.
 - Convert logits to probabilities with `jax.nn.softmax(..., axis=-1)[..., -1]`.
 - For `SegmentNT`, use `config.features`.
+- `segment_nt_multi_species` is a checkpoint family choice, not a runtime species token input.
+- Do not assume output length always equals input bp length; align coordinates from returned tensor length.
 - For `SegmentEnformer` and `SegmentBorzoi`, use `FEATURES`.
 - For `hk.transform_with_state(...)` paths, handle `(outs, state)` returned by apply.
+
+5. Prefer the reusable interval script for real-region runs.
+- For UCSC interval fetch + SegmentNT inference + track plotting, use [scripts/run_segment_nt_region.py](scripts/run_segment_nt_region.py).
 
 ## Grounded API Surface
 
@@ -77,3 +86,4 @@ Do not invent alternate segmentation wrappers or hidden post-processing function
 - Read [references/constraints.md](references/constraints.md) for `N` handling, rescaling, and token divisibility.
 - Read [references/setup-and-troubleshooting.md](references/setup-and-troubleshooting.md) for setup, cache, and device/runtime failures.
 - Use [scripts/compute_rescaling_factor.py](scripts/compute_rescaling_factor.py) when SegmentNT runs exceed the training length.
+- Use [scripts/run_segment_nt_region.py](scripts/run_segment_nt_region.py) for real genomic-interval prediction and plotting.

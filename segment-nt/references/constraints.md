@@ -15,8 +15,16 @@ Tokenization implications:
 - Use consistent names with `$nucleotide-transformer`:
   - `num_tokens_inference` includes CLS.
   - `num_dna_tokens_excluding_cls` excludes CLS.
-- Approximate token count from bp (only valid with no `N`): `num_tokens_inference = ceil(bp / 6) + 1`.
+- Exact token count from bp (valid only with no `N`):
+  - `num_dna_tokens_excluding_cls = floor(bp / 6) + (bp % 6)`
+  - `num_tokens_inference = num_dna_tokens_excluding_cls + 1`
+- Practical shortcut: if `bp % 24 == 0`, then `num_dna_tokens_excluding_cls` is guaranteed divisible by 4.
 - Divisibility check applies to `num_dna_tokens_excluding_cls`.
+
+Output-length implication:
+
+- Do not assume output genomic length exactly equals input bp length for every SegmentNT run.
+- Always derive plotting coordinates from the returned tensor length (or enforce a clean input length rule such as `bp % 24 == 0`).
 
 ## Rescaling
 
@@ -28,7 +36,7 @@ Grounded formula from docs and notebooks:
 - Here `num_tokens_inference` includes CLS.
 - For `40008` bp with no `N`, the docs example gives `num_tokens_inference=6669`, so `rescaling_factor=6669/2048`.
 
-Use [scripts/compute_rescaling_factor.py](../scripts/compute_rescaling_factor.py) when the user gives a concrete sequence length. The helper assumes 6-mer tokenization with no `N` when converting base pairs to token count.
+Use [scripts/compute_rescaling_factor.py](../scripts/compute_rescaling_factor.py) when the user gives a concrete sequence length. The helper is exact for SegmentNT tokenization when the sequence has no `N`.
 
 ## SegmentEnformer and SegmentBorzoi examples
 

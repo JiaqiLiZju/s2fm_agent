@@ -9,6 +9,7 @@ Choose `SegmentNT` when the user wants:
 - segmentation with the Nucleotide Transformer backbone
 - inference on sequences around 30 kb, with possible extension to 50 kb
 - `segment_nt` or `segment_nt_multi_species`
+- awareness that `segment_nt_multi_species` is a checkpoint family choice, not a runtime species-conditioning token
 - explicit control of `rescaling_factor` for long-sequence extrapolation
 - feature names read from `config.features`
 

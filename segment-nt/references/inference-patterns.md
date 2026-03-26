@@ -15,8 +15,11 @@ jax.config.update("jax_platform_name", "cpu")
 devices = jax.devices("cpu")
 num_devices = len(devices)
 
-# Number of DNA tokens, excluding prepended CLS token.
-num_dna_tokens_excluding_cls = 1668
+# Example no-N sequence length (bp).
+sequence_length_bp = 32_764
+
+# SegmentNT tokenizer (k=6) exact token count for no-N inputs.
+num_dna_tokens_excluding_cls = (sequence_length_bp // 6) + (sequence_length_bp % 6)
 assert num_dna_tokens_excluding_cls % 4 == 0
 
 # For long-context inference, docs use: rescaling_factor = num_tokens_inference / 2048.
@@ -34,10 +37,7 @@ parameters, forward_fn, tokenizer, config = get_pretrained_segment_nt_model(
 forward_fn = hk.transform(forward_fn)
 apply_fn = jax.pmap(forward_fn.apply, devices=devices, donate_argnums=(0,))
 
-sequences = [
-    "ATTCCGATTCCGATTCCAACGGATTATTCCGATTAACCGATTCCAATT",
-    "ATTTCTCTCTCTCTCTGAGATCGATGATTTCTCTCTCATCGAACTATG",
-]
+sequences = ["A" * sequence_length_bp]
 tokens_ids = [b[1] for b in tokenizer.batch_tokenize(sequences)]
 tokens = jnp.stack([jnp.asarray(tokens_ids, dtype=jnp.int32)] * num_devices, axis=0)
 
@@ -52,6 +52,11 @@ probabilities = np.asarray(jax.nn.softmax(logits, axis=-1))[..., -1]
 idx_intron = config.features.index("intron")
 probabilities_intron = probabilities[..., idx_intron]
 ```
+
+Notes:
+
+- `segment_nt_multi_species` is selected via `model_name`; this JAX path does not take a runtime species token.
+- For region plotting, map coordinates from the returned tensor length rather than assuming exact bp parity.
 
 ## SegmentEnformer
 

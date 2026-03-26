@@ -20,6 +20,9 @@ required_inputs:
   - sequence
 optional_inputs:
   - model-name
+  - species
+  - assembly
+  - genomic-interval
   - device-topology
   - token-count
 constraints:
@@ -28,6 +31,7 @@ constraints:
   - transform-with-state-required-for-segmentenformer-and-segmentborzoi
 tools:
   - scripts/compute_rescaling_factor.py
+  - scripts/run_segment_nt_region.py
 priority_rules:
   - prefer-when-user-explicitly-mentions-segmentnt-family
   - prefer-when-task-needs-segmentation-or-rescaling-factor-calculation
