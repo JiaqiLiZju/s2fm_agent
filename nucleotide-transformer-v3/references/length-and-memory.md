@@ -10,13 +10,21 @@ Grounded rules:
 
 - 7 downsample models: length divisible by `128`
 - 5 downsample models: length divisible by `32`
+- General rule: `divisor = 2 ** model.config.num_downsamples`
 
 ## Tokenization and sequence handling
 
-- In the HF tutorial path, use `pad_to_multiple_of=128` for batched tokenization.
+- In the HF path, use `pad_to_multiple_of=divisor` where `divisor` is derived from the loaded model config.
 - Crop to nearest valid length when exact endpoints are not critical.
 - If padding is necessary, pad with `N` tokens.
 - Do not recommend `[PAD]` tokens for biological sequence padding.
+- Use [scripts/check_valid_length.py](../scripts/check_valid_length.py) to validate a concrete length.
+
+## Output-length rule for post-trained heads
+
+- `outs["logits"]` remains full length.
+- `outs["bigwig_tracks_logits"]` and `outs["bed_tracks_logits"]` keep center positions only.
+- Compute cropped length via `int(input_len * model.config.keep_target_center_fraction)` instead of hardcoding `37.5%`.
 
 ## Memory and dtype
 

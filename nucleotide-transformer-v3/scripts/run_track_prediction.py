@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 
 
@@ -94,6 +95,14 @@ def choose_dtype(torch_mod, req: str, device: str):
     return torch_mod.float32
 
 
+DNA_RE = re.compile(r"[^ACGTN]")
+
+
+def sanitize_dna(sequence: str) -> str:
+    """Uppercase and replace non-ACGTN characters with N."""
+    return DNA_RE.sub("N", sequence.upper())
+
+
 def main() -> int:
     args = parse_args()
 
@@ -123,27 +132,15 @@ def main() -> int:
     dtype = choose_dtype(torch, args.dtype, device)
 
     print(f"[1/6] device={device}, dtype={dtype}", flush=True)
-
-    url = (
-        "https://api.genome.ucsc.edu/getData/sequence"
-        f"?genome={args.assembly};chrom={args.chrom};start={args.start};end={args.end}"
-    )
-    resp = requests.get(url, timeout=60)
-    resp.raise_for_status()
-    seq = resp.json()["dna"].upper()
-
-    orig_len = len(seq)
-    seq = seq[: (len(seq) // 128) * 128]
-    seq_len = len(seq)
-    if seq_len == 0:
-        raise SystemExit("Sequence length is zero after cropping to multiple of 128")
-
-    print(f"[2/6] sequence original={orig_len}, cropped={seq_len}", flush=True)
-    print("[3/6] loading config/tokenizer/model from HF...", flush=True)
+    print("[2/6] loading config/tokenizer/model from HF...", flush=True)
 
     config = AutoConfig.from_pretrained(args.model, trust_remote_code=True, token=hf_token)
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True, token=hf_token)
     model = AutoModel.from_pretrained(args.model, trust_remote_code=True, token=hf_token)
+
+    num_downsamples = int(getattr(config, "num_downsamples", 7))
+    divisor = 2 ** num_downsamples
+    keep_fraction = float(getattr(config, "keep_target_center_fraction", 0.375))
 
     if device == "cuda":
         model = model.to(device=device, dtype=dtype)
@@ -151,15 +148,51 @@ def main() -> int:
         model = model.to(device=device)
     model.eval()
 
-    print("[3/6] model loaded", flush=True)
+    url = (
+        "https://api.genome.ucsc.edu/getData/sequence"
+        f"?genome={args.assembly};chrom={args.chrom};start={args.start};end={args.end}"
+    )
+    resp = requests.get(url, timeout=60)
+    resp.raise_for_status()
+    seq = sanitize_dna(resp.json()["dna"])
+
+    orig_len = len(seq)
+    seq = seq[: (len(seq) // divisor) * divisor]
+    seq_len = len(seq)
+    if seq_len == 0:
+        raise SystemExit(
+            f"Sequence length is zero after cropping to multiple of {divisor}. "
+            "Use a longer interval."
+        )
+
+    print(
+        f"[3/6] model loaded; num_downsamples={num_downsamples} divisor={divisor} "
+        f"keep_fraction={keep_fraction}",
+        flush=True,
+    )
+    print(f"[3/6] sequence original={orig_len}, cropped={seq_len}", flush=True)
     print("[4/6] tokenizing + inference...", flush=True)
 
     batch = tokenizer([seq], add_special_tokens=False, return_tensors="pt")
     input_ids = batch["input_ids"].to(device)
-    species_ids = model.encode_species(args.species).to(device)
+    try:
+        species_ids = model.encode_species(args.species).to(device)
+    except Exception as exc:
+        supported_species = getattr(model, "supported_species", None)
+        if supported_species is not None:
+            raise SystemExit(
+                f"Unknown species '{args.species}'. Supported species: {supported_species}"
+            ) from exc
+        raise
 
     with torch.no_grad():
         outs = model(input_ids=input_ids, species_ids=species_ids)
+
+    if "bigwig_tracks_logits" not in outs or "bed_tracks_logits" not in outs:
+        raise SystemExit(
+            "Model outputs do not include track heads. Use a post-trained NTv3 checkpoint "
+            "(for example InstaDeepAI/NTv3_100M_post)."
+        )
 
     bigwig = outs["bigwig_tracks_logits"].detach().float().cpu().numpy()[0]
     bed_logits = outs["bed_tracks_logits"].detach().float().cpu().numpy()[0]
@@ -171,8 +204,14 @@ def main() -> int:
         flush=True,
     )
 
-    bigwig_names = config.bigwigs_per_species[args.species]
-    bed_element_names = config.bed_elements_names
+    bigwig_by_species = getattr(config, "bigwigs_per_species", {})
+    if args.species not in bigwig_by_species:
+        raise SystemExit(
+            f"Species '{args.species}' missing in config.bigwigs_per_species. "
+            f"Available: {list(bigwig_by_species.keys())}"
+        )
+    bigwig_names = bigwig_by_species[args.species]
+    bed_element_names = getattr(config, "bed_elements_names", [])
 
     preferred_tracks = {
         "K562 RNA-seq": "ENCSR056HPM",
@@ -189,7 +228,7 @@ def main() -> int:
     if not tracks_to_plot:
         max_tracks = max(1, args.max_fallback_tracks)
         for i, tid in enumerate(bigwig_names[:max_tracks]):
-            tracks_to_plot[f"human_track_{i + 1}"] = tid
+            tracks_to_plot[f"{args.species}_track_{i + 1}"] = tid
 
     preferred_elements = [
         "protein_coding_gene",
@@ -216,10 +255,16 @@ def main() -> int:
         bed_probs[elem] = probs[:, elem_idx, 1]
 
     window_len = seq_len
-    prediction_start = args.start + int(window_len * 0.3125)
-    prediction_end = prediction_start + int(window_len * 0.375)
+    predicted_len = int(bigwig.shape[0])
+    center_offset = max((window_len - predicted_len) // 2, 0)
+    prediction_start = args.start + center_offset
+    prediction_end = prediction_start + predicted_len
 
     all_tracks = {**bigwig_tracks, **bed_probs}
+    if not all_tracks:
+        raise SystemExit(
+            "No tracks available to plot. Check species, model checkpoint, and track metadata."
+        )
 
     fig, axes = plt.subplots(
         len(all_tracks),
@@ -264,6 +309,9 @@ def main() -> int:
         "end": args.end,
         "sequence_length_original": orig_len,
         "sequence_length_used": seq_len,
+        "num_downsamples": num_downsamples,
+        "divisor": divisor,
+        "keep_target_center_fraction": keep_fraction,
         "prediction_start": prediction_start,
         "prediction_end": prediction_end,
         "device": device,

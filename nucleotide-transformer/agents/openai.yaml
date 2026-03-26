@@ -1,4 +1,4 @@
 interface:
   display_name: "Nucleotide Transformer"
-  short_description: "Classic NT v1/v2 inference workflows"
-  default_prompt: "Use $nucleotide-transformer to help me load a Nucleotide Transformer v1 or v2 model, tokenize DNA, or extract embeddings."
+  short_description: "NT v1/v2 JAX inference, tokenization, embeddings, and attention maps"
+  default_prompt: "Use $nucleotide-transformer to help me load an NT v1/v2 checkpoint with get_pretrained_model, tokenize DNA, reason about token counts (with/without CLS), and extract embeddings or attention maps."

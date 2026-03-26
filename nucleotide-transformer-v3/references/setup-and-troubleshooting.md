@@ -40,12 +40,33 @@ Option 3: pass token directly in code
 AutoModel.from_pretrained(..., token=HF_TOKEN, trust_remote_code=True)
 ```
 
+Practical pattern:
+
+- Prefer setting `HF_TOKEN` in the environment and reading it in scripts.
+- Do not hardcode tokens in notebooks or committed files.
+
 ## Minimal import smoke check
 
 ```python
 from transformers import AutoModel, AutoModelForMaskedLM, AutoTokenizer
 import torch
 import numpy
+```
+
+Minimal gated-model smoke check (HF path):
+
+```python
+import os
+from transformers import AutoModel
+
+token = os.environ["HF_TOKEN"]
+model = AutoModel.from_pretrained(
+    "InstaDeepAI/NTv3_100M_post",
+    trust_remote_code=True,
+    token=token,
+)
+print(model.config.num_downsamples)
+print(model.config.keep_target_center_fraction)
 ```
 
 ## Common failure modes
@@ -55,6 +76,7 @@ import numpy
 
 2. Hugging Face auth / 401 / gated model error
 - Ensure account access to the NTv3 repo and authenticate (`huggingface-cli login`), or pass `token=...`.
+- Verify the token is visible in the current process (`HF_TOKEN`) and has accepted gated-model terms.
 
 3. Slow or unstable weight download
 - Set `HF_HUB_DISABLE_XET=1` as a fallback when default transport is unreliable.
@@ -71,6 +93,7 @@ import numpy
 - Use a smaller checkpoint first (`NTv3_8M_pre` or `NTv3_100M_post`).
 - Use reduced precision (`bfloat16` or `float16`) on GPU.
 - Reduce sequence length or batch size.
+- Prefer single-example runs first for post-trained `32,768+` contexts before scaling batch size.
 
 ## Cold-start expectations
 

@@ -1,18 +1,21 @@
 ---
 name: nucleotide-transformer-v3
-description: Use Nucleotide Transformer v3 for long-context multispecies inference via the Hugging Face Transformers tutorial path (primary) or legacy JAX helper APIs (secondary), including pre-trained MLM outputs, post-trained functional-track and annotation prediction, species conditioning, sequence-length validation, and gated-repo setup troubleshooting. Use when Codex needs to write, fix, explain, or review code or notebooks involving `AutoTokenizer.from_pretrained(..., trust_remote_code=True)`, `AutoModelForMaskedLM`, `AutoModel`, `encode_species`, NTv3 model names, bigwig/bed outputs, or NTv3 installation and authentication issues.
+description: Use Nucleotide Transformer v3 for long-context multispecies inference with Hugging Face Transformers as the primary path, with JAX helper APIs as secondary compatibility, including pre-trained MLM outputs, post-trained species-conditioned track/annotation prediction, length-divisibility checks, and gated-repo troubleshooting. Use when Codex needs to write, fix, explain, or review code or notebooks involving `AutoTokenizer.from_pretrained(..., trust_remote_code=True)`, `AutoModelForMaskedLM`, `AutoModel`, `encode_species`, `num_downsamples`, `keep_target_center_fraction`, NTv3 model names, bigwig/bed outputs, or NTv3 install/auth issues.
 ---
 
 # Nucleotide Transformer v3
 
 ## Overview
 
-Use this skill for NTv3 only. Prefer the official notebook tutorial path based on Hugging Face Transformers with `trust_remote_code=True`. Use the legacy JAX helper APIs only when the user explicitly needs that code path and already has a working source install.
+Use this skill for NTv3 only.
+
+- Primary path: Hugging Face Transformers + PyTorch with `trust_remote_code=True`.
+- Secondary path: legacy JAX helper APIs for projects that already depend on `nucleotide_transformer_v3.pretrained`.
 
 ## Follow This Decision Flow
 
 1. Choose the backend first.
-- Default to the tutorial backend: Hugging Face Transformers + PyTorch.
+- Default to the HF backend: Transformers + PyTorch.
 - Use the JAX helper backend only for existing code that already uses `nucleotide_transformer_v3.pretrained`.
 
 2. Confirm gated-repo access early.
@@ -29,13 +32,16 @@ Use this skill for NTv3 only. Prefer the official notebook tutorial path based o
 
 5. Validate sequence length before writing code.
 - Sequence length must be divisible by `2^num_downsamples`.
-- For the main 7-downsample models, the divisor is `128`.
-- For HF tokenization, use `pad_to_multiple_of=128`, or crop/pad with `N`.
+- Main production models typically use `num_downsamples=7` (divisor `128`).
+- 5-downsample ablations use divisor `32`.
+- Prefer deriving divisor from config (`2 ** model.config.num_downsamples`) instead of hardcoding.
+- For HF tokenization, use `pad_to_multiple_of=<divisor>`, or crop/pad with `N`.
 - Use [scripts/check_valid_length.py](scripts/check_valid_length.py) when the user gives a concrete sequence length.
 
 6. Handle conditioning and outputs correctly.
 - For HF post-trained models, get species ids with `model.encode_species(...)`.
-- Explain that functional-track and annotation outputs are cropped to the middle 37.5%, while MLM logits stay at full length.
+- Explain that functional-track and annotation outputs keep the model's center fraction (`model.config.keep_target_center_fraction`), while MLM logits stay full-length.
+- For main post-trained checkpoints this center fraction is commonly 37.5%, but do not hardcode it.
 
 7. Address install, version, and network issues explicitly.
 - For installation failures, start with [references/setup-and-troubleshooting.md](references/setup-and-troubleshooting.md).
@@ -54,9 +60,11 @@ Treat the following HF tutorial names and patterns as grounded:
 - `AutoTokenizer.from_pretrained(..., trust_remote_code=True, token=...)`
 - `AutoModelForMaskedLM.from_pretrained(..., trust_remote_code=True, token=...)`
 - `AutoModel.from_pretrained(..., trust_remote_code=True, token=...)`
-- `tokenizer(..., add_special_tokens=False, padding=True, pad_to_multiple_of=128, return_tensors="pt")`
+- `tokenizer(..., add_special_tokens=False, padding=True, pad_to_multiple_of=<divisor>, return_tensors="pt")`
 - `model.encode_species(...)`
 - `model(input_ids=..., species_ids=...)`
+- `model.config.num_downsamples`
+- `model.config.keep_target_center_fraction`
 - `outs["logits"]`
 - `outs["bigwig_tracks_logits"]`
 - `outs["bed_tracks_logits"]`
@@ -85,13 +93,25 @@ Grounded main model names and HF repo ids:
 - `InstaDeepAI/NTv3_100M_post`
 - `InstaDeepAI/NTv3_650M_post`
 
+Grounded optional intermediate/ablation names:
+
+- `NTv3_8M_pre_8kb`
+- `NTv3_100M_pre_8kb`
+- `NTv3_100M_post_131kb`
+- `NTv3_650M_pre_8kb`
+- `NTv3_650M_post_131kb`
+- `NTv3_5downsample_pre_8kb`
+- `NTv3_5downsample_pre`
+- `NTv3_5downsample_post_131kb`
+- `NTv3_5downsample_post`
+
 Do not invent alternate wrappers or training code from this skill alone.
 
 ## Response Style
 
 - Prefer concise Transformers examples first, with exact model names.
 - Use JAX examples only when the user asks for the legacy API path.
-- Surface divisibility rules before discussing large-context runs.
+- Surface divisibility and center-fraction rules before discussing large-context runs.
 - State clearly whether a sequence should be cropped or padded with `N`.
 
 ## References

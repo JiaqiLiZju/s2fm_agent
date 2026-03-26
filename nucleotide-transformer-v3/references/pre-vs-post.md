@@ -22,13 +22,14 @@ model = AutoModelForMaskedLM.from_pretrained(
     trust_remote_code=True,
     token=HF_TOKEN,
 )
+divisor = 2 ** model.config.num_downsamples
 
 sequences = ["ATTCCGATTCCGATTCCG", "ATTTCTCTCTCTCTCTGAGATCGATCGATCGAT"]
 batch = tokenizer(
     sequences,
     add_special_tokens=False,
     padding=True,
-    pad_to_multiple_of=128,
+    pad_to_multiple_of=divisor,
     return_tensors="pt",
 )
 
@@ -54,6 +55,7 @@ model = AutoModel.from_pretrained(
     trust_remote_code=True,
     token=HF_TOKEN,
 )
+divisor = 2 ** model.config.num_downsamples
 
 seq_length = 2**15
 sequences = ["A" * seq_length, "T" * seq_length]
@@ -61,7 +63,7 @@ batch = tokenizer(
     sequences,
     add_special_tokens=False,
     padding=True,
-    pad_to_multiple_of=128,
+    pad_to_multiple_of=divisor,
     return_tensors="pt",
 )
 
@@ -71,6 +73,11 @@ outs = model(input_ids=batch["input_ids"], species_ids=species_ids)
 logits = outs["logits"]
 bigwig_logits = outs["bigwig_tracks_logits"]
 bed_logits = outs["bed_tracks_logits"]
+
+keep_fraction = model.config.keep_target_center_fraction
+input_len = batch["input_ids"].shape[1]
+cropped_len = int(input_len * keep_fraction)
+print(cropped_len)
 ```
 
 ## Real track prediction workflow
@@ -96,5 +103,6 @@ posttrained_model, tokenizer, _ = get_posttrained_ntv3_model(
 ## Output differences
 
 - `outs["logits"]` keeps full sequence length.
-- `outs["bigwig_tracks_logits"]` and `outs["bed_tracks_logits"]` are cropped to the middle 37.5%.
-- For input length `32768`, the cropped output length is `12288`.
+- `outs["bigwig_tracks_logits"]` and `outs["bed_tracks_logits"]` keep only the center region.
+- The center length is `int(input_len * model.config.keep_target_center_fraction)`.
+- For common post-trained checkpoints with `keep_target_center_fraction=0.375` and input `32768`, cropped output is `12288`.
