@@ -1,128 +1,144 @@
 # s2f-skills
 
-An academically oriented Codex skills repository for computational genomics and genome foundation model workflows.
+`s2f-skills` is an academically oriented, execution-ready repository for computational genomics workflows with Codex.
 
-This repository curates grounded methodological guidance, reproducible command templates, and model-specific caveats for end-to-end research tasks, including:
+It combines grounded skill packages, deterministic routing, task-level input contracts, reproducible environment setup scripts, and validation/evaluation tooling so research questions can be translated into runnable analysis with lower setup variance.
 
-- controlled environment setup and dependency provisioning across model families
-- inference, variant-effect estimation, and interpretation workflows
-- preprocessing, training, and attribution pipelines for supported frameworks
-- validation utilities and smoke tests for reproducible workflow deployment
+## Start Here
 
-The goal of `s2f-skills` is to improve methodological consistency, reduce setup variance, and accelerate translation from research question to executable analysis.
-
-## Quick Start
-
-### Path A: Link skills only
+For a first successful run on a machine that already has this repo cloned:
 
 ```bash
 ./scripts/link_skills.sh
-```
-
-### Path B: Fresh machine bootstrap (recommended)
-
-```bash
-./scripts/bootstrap.sh
-```
-
-Equivalent Make target:
-
-```bash
-make bootstrap
-```
-
-### Verify installation
-
-```bash
+./scripts/route_query.sh --query "Use \$dnabert2 to validate my train/dev/test CSV files"
+./scripts/run_agent.sh --query "Need variant-effect guidance for chr12 REF/ALT"
 ./scripts/smoke_test.sh --skills-dir "${CODEX_HOME:-$HOME/.codex}/skills"
 ```
 
-### Use a skill explicitly
+For a fresh-machine bootstrap (recommended):
 
-```text
-Use $nucleotide-transformer-v3 to write a species-conditioned NTv3 inference example.
+```bash
+./scripts/bootstrap.sh
+# or
+make bootstrap
 ```
 
 ## Table of Contents
 
-- [What This Repository Includes](#what-this-repository-includes)
-- [Repository Layout](#repository-layout)
-- [Deployment Guide](#deployment-guide)
-- [Verification and Troubleshooting](#verification-and-troubleshooting)
-- [How Skills and Agents Work](#how-skills-and-agents-work)
-- [Orchestration Layer](#orchestration-layer)
-- [Agent Runtime CLI](#agent-runtime-cli)
-- [Recommended Prompting Pattern](#recommended-prompting-pattern)
+- [Functional Capabilities](#functional-capabilities)
+- [Application Scenarios](#application-scenarios)
+- [Skill Catalog](#skill-catalog)
+- [Repository Structure](#repository-structure)
+- [Routing and Agent Runtime](#routing-and-agent-runtime)
+- [Installation and Deployment](#installation-and-deployment)
+- [Validation and Troubleshooting](#validation-and-troubleshooting)
 - [Maintainers](#maintainers)
 - [Star History](#star-history)
 
-## What This Repository Includes
+## Functional Capabilities
 
-The repository currently includes eleven packaged skills:
+| Capability | What it enables | Entry points |
+| --- | --- | --- |
+| Skill-grounded execution | Domain-specific guidance for genomics model families and workflows | `skills/*/SKILL.md`, `skills-dev/*/SKILL.md` |
+| Deterministic routing | Ranked skill selection with `route` / `clarify` decision and confidence | `scripts/route_query.sh`, `registry/routing.yaml` |
+| Task-contract checks | Detects missing required inputs before execution guidance | `scripts/run_agent.sh`, `registry/task_contracts.yaml` |
+| Cross-skill playbook mapping | Maps user intent to reusable task playbooks | `playbooks/*/README.md` |
+| Reproducible environment setup | Standardized stack provisioning and one-step bootstrap | `scripts/provision_stack.sh`, `scripts/bootstrap.sh`, `Makefile` |
+| Validation and regression checks | Registry, metadata, migration, and routing consistency checks | `scripts/validate_*.sh`, `make validate-agent` |
 
-| Skill ID | Best for | Explicit invocation | Docs |
+## Application Scenarios
+
+| Scenario | Typical objective | Primary skills | Playbook |
 | --- | --- | --- | --- |
-| `alphagenome-api` | AlphaGenome setup, variant prediction, plotting, and troubleshooting | `$alphagenome-api` | [`SKILL.md`](./skills/alphagenome-api/SKILL.md) · [`references/`](./skills/alphagenome-api/references/) |
-| `basset-workflows` | Legacy Basset Torch7 preprocessing, prediction, interpretation, and SAD workflows | `$basset-workflows` | [`SKILL.md`](./skills-dev/basset-workflows/SKILL.md) · [`references/`](./skills-dev/basset-workflows/references/) |
-| `bpnet` | BPNet setup, preprocessing, train/predict/SHAP workflows, and motif/hit-calling integration | `$bpnet` | [`SKILL.md`](./skills-dev/bpnet/SKILL.md) · [`references/`](./skills-dev/bpnet/references/) |
-| `borzoi-workflows` | Borzoi setup, tutorials, model download, variant scoring, and interpretation workflows | `$borzoi-workflows` | [`SKILL.md`](./skills/borzoi-workflows/SKILL.md) · [`references/`](./skills/borzoi-workflows/references/) |
-| `dnabert2` | DNABERT2 embeddings, GUE evaluation, CSV validation, and fine-tuning workflows | `$dnabert2` | [`SKILL.md`](./skills/dnabert2/SKILL.md) · [`references/`](./skills/dnabert2/references/) |
-| `evo2-inference` | Evo 2 installation, checkpoint choice, inference, and deployment paths | `$evo2-inference` | [`SKILL.md`](./skills/evo2-inference/SKILL.md) · [`references/`](./skills/evo2-inference/references/) |
-| `gpn-models` | Choosing between GPN-family frameworks and grounded loading/CLI workflows | `$gpn-models` | [`SKILL.md`](./skills/gpn-models/SKILL.md) · [`references/`](./skills/gpn-models/references/) |
-| `nucleotide-transformer` | Classic NT v1/v2 JAX inference, tokenization, and embeddings workflows | `$nucleotide-transformer` | [`SKILL.md`](./skills-dev/nucleotide-transformer/SKILL.md) · [`references/`](./skills-dev/nucleotide-transformer/references/) |
-| `nucleotide-transformer-v3` | NTv3 Transformers inference, species conditioning, setup troubleshooting, and length-aware runs | `$nucleotide-transformer-v3` | [`SKILL.md`](./skills/nucleotide-transformer-v3/SKILL.md) · [`references/`](./skills/nucleotide-transformer-v3/references/) |
-| `segment-nt` | SegmentNT, SegmentEnformer, and SegmentBorzoi segmentation inference workflows | `$segment-nt` | [`SKILL.md`](./skills/segment-nt/SKILL.md) · [`references/`](./skills/segment-nt/references/) |
-| `skill-factory` | Scaffold consistent skills from JSON specs | `$skill-factory` | [`SKILL.md`](./skills-dev/skill-factory/SKILL.md) · [`references/`](./skills-dev/skill-factory/references/) |
+| Variant-effect analysis | Compare REF vs ALT impact or prioritize variants | `alphagenome-api`, `borzoi-workflows`, `gpn-models`, `evo2-inference` | [`variant-effect`](./playbooks/variant-effect/README.md) |
+| Embedding and representation | Produce sequence embeddings for downstream analyses | `dnabert2`, `nucleotide-transformer-v3`, `nucleotide-transformer`, `evo2-inference` | [`embedding`](./playbooks/embedding/README.md) |
+| Track prediction workflows | Run sequence-to-signal prediction with model-appropriate constraints | `nucleotide-transformer-v3`, `borzoi-workflows`, `segment-nt` | [`track-prediction`](./playbooks/track-prediction/README.md) |
+| Fine-tuning and training setup | Prepare schemas, training configs, and model-specific run paths | `dnabert2`, `bpnet`, `basset-workflows` | [`fine-tuning`](./playbooks/fine-tuning/README.md) |
+| Environment bring-up and migration | Build reproducible stacks and verify operational readiness | `skill-factory` plus stack-specific skills | [`environment-setup`](./playbooks/environment-setup/README.md) |
 
-Source notes used to build or plan skills are in [`Readme/`](./Readme/).
+## Skill Catalog
 
-## Repository Layout
+The repository currently includes **11** packaged skills.
+
+Status definition:
+
+- `Stable`: canonical package in `skills/<skill-id>/`
+- `Dev`: in-progress package in `skills-dev/<skill-id>/`
+
+| Skill ID | Status | Path | Best for | Explicit invocation | Docs |
+| --- | --- | --- | --- | --- | --- |
+| `alphagenome-api` | Stable | `skills/alphagenome-api` | AlphaGenome setup, variant prediction, plotting, troubleshooting | `$alphagenome-api` | [`SKILL.md`](./skills/alphagenome-api/SKILL.md) · [`references/`](./skills/alphagenome-api/references/) |
+| `basset-workflows` | Dev | `skills-dev/basset-workflows` | Legacy Basset Torch7 preprocessing, prediction, interpretation, SAD | `$basset-workflows` | [`SKILL.md`](./skills-dev/basset-workflows/SKILL.md) · [`references/`](./skills-dev/basset-workflows/references/) |
+| `bpnet` | Dev | `skills-dev/bpnet` | BPNet preprocessing, train/predict/SHAP, motif integration | `$bpnet` | [`SKILL.md`](./skills-dev/bpnet/SKILL.md) · [`references/`](./skills-dev/bpnet/references/) |
+| `borzoi-workflows` | Stable | `skills/borzoi-workflows` | Borzoi setup, tutorials, variant scoring, interpretation | `$borzoi-workflows` | [`SKILL.md`](./skills/borzoi-workflows/SKILL.md) · [`references/`](./skills/borzoi-workflows/references/) |
+| `dnabert2` | Stable | `skills/dnabert2` | Embeddings, GUE evaluation, CSV validation, fine-tuning | `$dnabert2` | [`SKILL.md`](./skills/dnabert2/SKILL.md) · [`references/`](./skills/dnabert2/references/) |
+| `evo2-inference` | Stable | `skills/evo2-inference` | Evo 2 setup, checkpoint choice, inference, deployment | `$evo2-inference` | [`SKILL.md`](./skills/evo2-inference/SKILL.md) · [`references/`](./skills/evo2-inference/references/) |
+| `gpn-models` | Stable | `skills/gpn-models` | GPN-family framework selection and usage | `$gpn-models` | [`SKILL.md`](./skills/gpn-models/SKILL.md) · [`references/`](./skills/gpn-models/references/) |
+| `nucleotide-transformer` | Dev | `skills-dev/nucleotide-transformer` | Classic NT v1/v2 JAX inference, tokenization, embeddings | `$nucleotide-transformer` | [`SKILL.md`](./skills-dev/nucleotide-transformer/SKILL.md) · [`references/`](./skills-dev/nucleotide-transformer/references/) |
+| `nucleotide-transformer-v3` | Stable | `skills/nucleotide-transformer-v3` | NTv3 inference, species conditioning, length-aware runs | `$nucleotide-transformer-v3` | [`SKILL.md`](./skills/nucleotide-transformer-v3/SKILL.md) · [`references/`](./skills/nucleotide-transformer-v3/references/) |
+| `segment-nt` | Stable | `skills/segment-nt` | SegmentNT-family segmentation inference and scaling logic | `$segment-nt` | [`SKILL.md`](./skills/segment-nt/SKILL.md) · [`references/`](./skills/segment-nt/references/) |
+| `skill-factory` | Dev | `skills-dev/skill-factory` | Scaffold and validate consistent skill packages from specs | `$skill-factory` | [`SKILL.md`](./skills-dev/skill-factory/SKILL.md) · [`references/`](./skills-dev/skill-factory/references/) |
+
+Reference notes used during skill development are in [`Readme/`](./Readme/).
+
+## Repository Structure
 
 ```text
 s2f-skills/
-├── agent/
-├── registry/
-├── skills/
-├── skills-dev/
-├── playbooks/
-├── evals/
-├── docs/
-├── README.md
-├── Readme/
-├── scripts/
-└── Readme/
+├── agent/                  # orchestrator identity, routing and safety policy
+├── registry/               # skills index, tags, routing config, task contracts
+├── skills/                 # canonical stable skill packages
+├── skills-dev/             # in-progress skill packages
+├── playbooks/              # task-level cross-skill guidance
+├── evals/                  # routing evaluation cases
+├── docs/                   # architecture and design notes
+├── scripts/                # setup, routing, orchestration, validation tooling
+├── Readme/                 # source notes and upstream references
+└── README.md
 ```
 
-Namespace migration note:
+Architecture details: [`docs/architecture.md`](./docs/architecture.md).
 
-- The following tested skills are now canonical under `skills/<skill-id>/`:
-  - `alphagenome-api`
-  - `borzoi-workflows`
-  - `nucleotide-transformer-v3`
-  - `gpn-models`
-  - `evo2-inference`
-  - `dnabert2`
-  - `segment-nt`
-- Root-level paths for these migrated skills are now removed; use `skills/<skill-id>/` paths.
+## Routing and Agent Runtime
 
-Temporary development note:
+Use the router when you only need skill selection and confidence:
 
-- The following in-progress skills are currently staged under `skills-dev/` for testing:
-  - `basset-workflows`
-  - `bpnet`
-  - `nucleotide-transformer`
-  - `skill-factory`
+```bash
+./scripts/route_query.sh --query "Use \$dnabert2 to validate my train/dev/test CSV."
+./scripts/route_query.sh --query "I need NTv3 track prediction for hg38." --format json
+./scripts/route_query.sh --query "Train a model on fasta labels." --task fine-tuning
+```
 
-## Deployment Guide
+Use the full agent runtime when you also need required-input checks and playbook mapping:
+
+```bash
+./scripts/run_agent.sh --query "Need variant-effect guidance around chr12 with REF/ALT."
+./scripts/run_agent.sh --query "Help me run Evo2 generation without NVIDIA GPU" --format json
+```
+
+Open the local interactive console:
+
+```bash
+./scripts/agent_console.sh
+```
+
+Decision lifecycle per query:
+
+1. infer or accept task hint
+2. score and rank candidate skills
+3. emit `decision=route` or `decision=clarify` with confidence
+4. if routed, resolve required inputs from task contracts first, then skill contracts
+
+## Installation and Deployment
 
 ### Prerequisites
 
-- Bash shell and Git
-- Python 3.10+ recommended (required by several stacks in practice)
-- Conda only if you plan to use `evo2-full`
-- NVIDIA GPU + CUDA toolchain for local Evo 2 GPU installs (`evo2-light` / `evo2-full`)
+- Bash and Git
+- Python 3.10+ recommended (required by multiple stacks in practice)
+- Conda only if using `evo2-full`
+- NVIDIA GPU + CUDA stack for local Evo 2 GPU paths (`evo2-light` / `evo2-full`)
 
-### 1. Install skills where Codex can discover them
+### 1. Install skills for Codex discovery
 
 Default skills directory:
 
@@ -130,7 +146,7 @@ Default skills directory:
 ${CODEX_HOME:-$HOME/.codex}/skills
 ```
 
-Install all skills:
+Install all registry-listed skills:
 
 ```bash
 ./scripts/link_skills.sh
@@ -142,8 +158,8 @@ Useful variants:
 
 ```bash
 ./scripts/link_skills.sh --list
-./scripts/link_skills.sh --skills-dir /opt/codex/skills --force
 ./scripts/link_skills.sh --registry ./registry/skills.yaml --list
+./scripts/link_skills.sh --skills-dir /opt/codex/skills --force
 ./scripts/link_skills.sh basset-workflows bpnet dnabert2 nucleotide-transformer nucleotide-transformer-v3 segment-nt borzoi-workflows
 ```
 
@@ -185,20 +201,16 @@ make bootstrap-evo2-light
 make bootstrap-evo2-full
 ```
 
-### 3. Optional: Evo 2 setup paths
+### 3. Optional Evo 2 paths
 
-#### Evo 2 light install
-
-`evo2-light` requires hardware-specific PyTorch setup before `flash-attn`:
+Evo 2 light (requires hardware-specific torch install command before `flash-attn`):
 
 ```bash
 export TORCH_INSTALL_CMD='$VENV_PYTHON -m pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu128'
 ./scripts/provision_stack.sh evo2-light
 ```
 
-#### Evo 2 full install
-
-Use an active Conda environment:
+Evo 2 full (active conda environment):
 
 ```bash
 conda create -n evo2-full python=3.11 -y
@@ -206,90 +218,62 @@ conda activate evo2-full
 ./scripts/provision_stack.sh evo2-full
 ```
 
-#### Evo 2 hosted API (recommended on macOS / no NVIDIA GPU)
+Hosted Evo 2 API path (recommended on macOS or without NVIDIA GPU):
 
 ```bash
 export NVCF_RUN_KEY='your_run_key'
 python skills/evo2-inference/scripts/run_hosted_api.py --num-tokens 8 --top-k 1
 ```
 
-Full hosted workflow with plots:
+Full hosted workflow with output plots:
 
 ```bash
 export NVCF_RUN_KEY='your_run_key'
 python skills/evo2-inference/scripts/run_real_evo2_workflow.py --output-dir skills/evo2-inference/results
 ```
 
-Operational notes reflected in this repo:
-
-- For forward/embedding tracks, prefer `evo2-7b/forward`
-- For generation, try `evo2-7b/generate`, then fallback to `evo2-40b/generate` when degraded
-- Variant effect is represented here as REF-vs-ALT delta proxy, not AlphaGenome-style `predict_variant(...)`
-
-### 4. Optional: Hardware-specific JAX override
-
-If `nt-jax` needs accelerator-specific JAX wheels:
+### 4. Optional hardware-specific JAX override
 
 ```bash
 export JAX_INSTALL_CMD='$VENV_PYTHON -m pip install jax[cuda12]'
 ./scripts/provision_stack.sh nt-jax
 ```
 
-## Verification and Troubleshooting
+## Validation and Troubleshooting
 
-Run baseline smoke checks:
+Baseline smoke checks:
 
 ```bash
 ./scripts/smoke_test.sh --skills-dir "${CODEX_HOME:-$HOME/.codex}/skills"
 ```
 
-Validate registry entries:
+Registry and metadata checks:
 
 ```bash
 ./scripts/validate_registry.sh
-# or
-make validate-registry
-```
-
-Validate skill metadata consistency:
-
-```bash
 ./scripts/validate_skill_metadata.sh
-# or
-make validate-skill-metadata
+./scripts/validate_migration_paths.sh
 ```
 
-Run full agent validation bundle:
-
-```bash
-make validate-agent
-```
-
-Evaluate routing cases:
+Routing checks and full validation bundle:
 
 ```bash
 ./scripts/validate_routing.sh
-# or
-make eval-routing
+make validate-agent
 ```
 
-Note:
-
-- `validate_routing.sh` invokes `route_query.sh` for each eval case, so runtime routing and offline eval use one routing logic source.
-- routing eval now includes both `route` and `clarify` decisions.
-
-Run one query through the router:
+Optional Make shortcuts:
 
 ```bash
-./scripts/route_query.sh --query "Use \$dnabert2 to validate my train/dev/test CSV."
-./scripts/route_query.sh --query "I need NTv3 track prediction for human hg38." --format json
-./scripts/route_query.sh --query "Train a model on fasta labels."
-# or
-make route-query QUERY='Help me run AlphaGenome predict_variant with RNA output'
+make validate-registry
+make validate-skill-metadata
+make validate-migration-paths
+make eval-routing
 make route-query QUERY='Need variant-effect guidance' TASK='variant-effect'
+make run-agent QUERY='Help me run AlphaGenome predict_variant with RNA output'
 ```
 
-Run with environment import checks:
+Extended smoke test with explicit environment imports:
 
 ```bash
 ./scripts/smoke_test.sh \
@@ -302,152 +286,18 @@ Run with environment import checks:
   --evo2-python /path/to/evo2-light/bin/python
 ```
 
-If a workflow fails, start from the skill's `references/` folder for setup caveats and troubleshooting notes.
-
-## How Skills and Agents Work
-
-Each packaged skill includes:
-
-### `SKILL.md`
-
-Operational instructions for Codex:
-
-- what the skill does
-- when it should trigger
-- workflow and trusted command/API patterns
-
-### `references/`
-
-On-demand deep guidance:
-
-- setup matrix and compatibility notes
-- runnable patterns
-- caveats and troubleshooting
-
-### `scripts/`
-
-Optional helper scripts for repeated validation or calculations.
-
-Current examples:
-
-- `skills/dnabert2/scripts/validate_dataset_csv.py`
-- `skills/dnabert2/scripts/recommend_max_length.py`
-- `skills/nucleotide-transformer-v3/scripts/check_valid_length.py`
-- `skills/segment-nt/scripts/compute_rescaling_factor.py`
-- `skills/segment-nt/scripts/run_segment_nt_region.py`
-- `skills/evo2-inference/scripts/run_hosted_api.py`
-- `skills/evo2-inference/scripts/run_real_evo2_workflow.py`
-
-### `agents/openai.yaml`
-
-UI-facing metadata for discovery and invocation:
-
-- `display_name`
-- `short_description`
-- `default_prompt`
-
-`agents/openai.yaml` improves discoverability, while `SKILL.md` remains the source of operational behavior.
-
-## Orchestration Layer
-
-`s2f` now ships with a deterministic agent layer that routes queries across skills and decides whether to answer directly (`route`) or ask one focused follow-up (`clarify`).
-
-Core components:
-
-- `agent/`: orchestrator identity, routing policy, and safety boundaries
-- `registry/`: machine-readable skill index, tag taxonomy, routing config, and task input contracts
-- `playbooks/`: cross-skill task patterns (`variant-effect`, `embedding`, `fine-tuning`, `track-prediction`, `environment-setup`)
-- `evals/routing/`: routing evaluation cases for both `route` and `clarify` decisions
-- `scripts/route_query.sh`: runtime router (`decision` + `confidence` + ranked candidates + reasons)
-- `scripts/run_agent.sh`: full orchestration output (router decision + input contract checks + playbook mapping)
-
-Routing lifecycle per query:
-
-1. infer task from explicit `--task`, alias rules, and query text
-2. rank candidate skills via explicit mention, trigger hits, and task alignment
-3. estimate confidence and emit `decision=route` or `decision=clarify`
-4. when routed, resolve required inputs from task contracts first, then skill contracts
-
-Compatibility note:
-
-- migrated skills use `skills/<skill-id>/` as the canonical path
-- operational scripts enumerate skills from `registry/skills.yaml` rather than hardcoded lists
-
-## Agent Runtime CLI
-
-Use `route_query.sh` when you only need routing decisions:
-
-```bash
-./scripts/route_query.sh --query "Use \$dnabert2 to validate my train/dev/test CSV."
-./scripts/route_query.sh --query "I need NTv3 track prediction for hg38." --format json
-./scripts/route_query.sh --query "Train a model on fasta labels."
-```
-
-Typical outputs:
-
-- high/medium confidence query -> `decision: route` with primary/secondary skills
-- low confidence query -> `decision: clarify` with one focused clarification question
-
-Use `run_agent.sh` when you need execution-facing orchestration details:
-
-```bash
-./scripts/run_agent.sh --query "Need variant-effect guidance around chr12 with REF/ALT."
-./scripts/run_agent.sh --query "Help me run Evo2 generation without NVIDIA GPU" --format json
-```
-
-`run_agent.sh` additionally returns:
-
-- `required_inputs_source` (`task-contract:<task>` or `skill:<id>`)
-- `required_inputs`, `provided_inputs`, `missing_inputs`
-- selected `playbook` (when available), `constraints`, and `next_prompt`
-
-Useful options:
-
-- force task selection with `--task` when intent is known
-- use `--format json` for downstream tooling or UI integration
-
-Interactive local console:
-
-```bash
-./scripts/agent_console.sh
-```
-
-## Recommended Prompting Pattern
-
-For best results, make prompts concrete:
-
-- name the model/framework
-- include hardware or environment constraints
-- include organism/genome build/input schema when relevant
-- ask for runnable examples when needed
-
-Examples:
-
-- `Use $alphagenome-api to write a notebook cell that compares REF vs ALT RNA-seq output for a single variant.`
-- `Use $bpnet to draft input_data.json and a runnable bpnet-train/bpnet-shap workflow for my ChIP-seq peaks.`
-- `Use $evo2-inference to tell me whether I can run evo2_20b on my machine and give me the correct install path.`
-- `Use $gpn-models to tell me whether aligned genomes are required for this workflow and suggest the right family.`
-- `Use $dnabert2 to check my DNABERT2 CSV schema and recommend model_max_length from sequence lengths.`
-- `Use $nucleotide-transformer to write a minimal JAX example with 250M_multi_species_v2 and explain 6-mer tokenization.`
-- `Use $nucleotide-transformer-v3 to write a post-trained NTv3 Transformers example for human and explain the output tensors.`
-- `Use $segment-nt to help me run SegmentNT on a 40 kb sequence and calculate the needed rescaling factor.`
-- `Use $borzoi-workflows to set up Borzoi and run latest tutorial variant scoring scripts on a small VCF.`
-- `Use $basset-workflows to validate my Torch7/Basset environment and run a conservative basset_predict.lua workflow.`
+When a workflow fails, start from the skill's `references/` folder and then check routing/task configuration under `registry/`.
 
 ## Maintainers
 
 When extending this repository:
 
-- keep `SKILL.md` concise
-- move detailed material to `references/`
-- add `scripts/` only when repeated logic is worth encoding
-- keep `agents/openai.yaml` aligned with the skill purpose
-- validate new skills before publishing
-- avoid claiming support for workflows not grounded in source material
-
-This repository currently ships the ten skills listed above.
-
-`Readme/CHM13_README.md` exists as source material, but a packaged CHM13 skill has not been added yet.
+- keep `SKILL.md` concise and operational
+- move detailed guidance to `references/`
+- add scripts only for repeated logic worth encoding
+- keep `skill.yaml` and `agents/openai.yaml` aligned with scope
+- update `registry/skills.yaml` when adding, moving, or disabling a skill
+- run validation (`make validate-agent`) before publishing
 
 ## Star History
 
