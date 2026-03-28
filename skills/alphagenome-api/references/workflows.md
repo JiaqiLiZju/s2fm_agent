@@ -52,6 +52,23 @@ plt.show()
 
 If the user does not ask for a figure, stop at the prediction object and explain how to inspect it.
 
+## Real-run artifact contract (recommended)
+
+For agent-driven real execution, prefer writing both:
+
+- one plot file (REF vs ALT overlay), and
+- one JSON summary with run status and key parameters.
+
+Suggested summary keys:
+
+- `run_time_utc`, `env_prefix`, `alphagenome_version`
+- `assembly`, `chrom`, `position`, `ref`, `alt`
+- `interval_start`, `interval_end`, `interval_width`
+- `requested_outputs`, `ontology_terms`
+- `status`, `error`, `plot_path`, `summary_path`
+
+This makes retries and automated evaluation deterministic.
+
 ## State assumptions explicitly
 
 Call out every inferred choice:

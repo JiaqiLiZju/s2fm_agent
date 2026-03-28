@@ -2,7 +2,7 @@ schema_version: 1
 updated_at: "2026-03-27"
 policies:
   variant-effect:
-    retry_policy: clarify-missing-inputs-then-retry-once
+    retry_policy: clarify-missing-inputs-then-connectivity-proxy-retry-once
     fallback_skills:
       - borzoi-workflows
       - gpn-models

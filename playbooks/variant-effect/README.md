@@ -68,6 +68,38 @@ bash scripts/run_agent.sh \
 3. Re-run `run_agent.sh` with the clarified inputs.
 4. Validate dry-run execution with `scripts/execute_plan.sh` before any real run.
 
+## AlphaGenome Real-Run Fast Path
+
+When task + inputs are complete (assembly/chrom/position/ALT), prefer running:
+
+```bash
+set -a; source .env; set +a
+conda run -n alphagenome-py310 \
+  python skills/alphagenome-api/scripts/run_alphagenome_predict_variant.py \
+  --chrom chr12 \
+  --position 1000000 \
+  --alt G \
+  --assembly hg38 \
+  --output-dir output/alphagenome
+```
+
+If client creation fails with `grpc.FutureTimeoutError`, retry via proxy:
+
+```bash
+set -a; source .env; set +a
+grpc_proxy=http://127.0.0.1:7890 \
+http_proxy=http://127.0.0.1:7890 \
+https_proxy=http://127.0.0.1:7890 \
+conda run -n alphagenome-py310 \
+  python skills/alphagenome-api/scripts/run_alphagenome_predict_variant.py \
+  --chrom chr12 \
+  --position 1000000 \
+  --alt G \
+  --assembly hg38 \
+  --output-dir output/alphagenome \
+  --request-timeout-sec 120
+```
+
 ## Matching Tutorial
 
 - [Variant-Effect Tutorial](../../tutorials/02-variant-effect.md)

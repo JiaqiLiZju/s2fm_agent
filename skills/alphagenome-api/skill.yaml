@@ -20,10 +20,14 @@ required_inputs:
 optional_inputs:
   - requested_outputs
   - ontology_terms
+  - output-dir
+  - runtime-context
+  - network-proxy-endpoint
 constraints:
   - python>=3.10
   - keep-interval-at-or-below-1Mbp
   - use-grounded-API-surface-only
+  - set-timeout-and-proxy-fallback-for-real-runs
 tools: []
 tool_contracts: []
 priority_rules:

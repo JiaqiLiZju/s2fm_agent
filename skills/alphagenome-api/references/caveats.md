@@ -31,11 +31,18 @@ Run these checks in order:
 ## Connectivity and proxy checks
 
 - If API calls hang during client creation or prediction, verify outbound connectivity to Google endpoints.
+- Fast preflight for gRPC endpoint reachability:
+  - `python - <<'PY'`
+  - `import socket; s=socket.socket(); s.settimeout(5); s.connect(('gdmscience.googleapis.com', 443)); print('ok')`
+  - `PY`
+  - If this times out, treat direct egress as blocked and switch to proxy.
 - In restricted networks, set proxy variables before running Python:
   - `grpc_proxy=http://127.0.0.1:7890`
   - `http_proxy=http://127.0.0.1:7890`
   - `https_proxy=http://127.0.0.1:7890`
 - Prefer lowercase proxy variable names for gRPC compatibility.
+- Typical timeout signature to match in logs:
+  - `grpc.FutureTimeoutError` during `dna_client.create(...)`.
 
 ## Conservative guidance
 

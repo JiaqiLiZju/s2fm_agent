@@ -69,6 +69,8 @@ parse_cases() {
       task = ""
       min_steps = "1"
       min_outputs = "1"
+      required_step_contains = ""
+      required_expected_output_contains = ""
     }
     function trim(s) {
       gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
@@ -84,7 +86,7 @@ parse_cases() {
     }
     function emit_case() {
       if (case_id != "") {
-        print case_id, query, task, min_steps, min_outputs
+        print case_id, query, task, min_steps, min_outputs, required_step_contains, required_expected_output_contains
       }
     }
     /^[[:space:]]*-[[:space:]]id:[[:space:]]*/ {
@@ -96,6 +98,8 @@ parse_cases() {
       task = ""
       min_steps = "1"
       min_outputs = "1"
+      required_step_contains = ""
+      required_expected_output_contains = ""
       next
     }
     /^[[:space:]]*query:[[:space:]]*/ {
@@ -122,6 +126,18 @@ parse_cases() {
       min_outputs = unquote(min_outputs)
       next
     }
+    /^[[:space:]]*required_step_contains:[[:space:]]*/ {
+      required_step_contains = $0
+      sub(/^[[:space:]]*required_step_contains:[[:space:]]*/, "", required_step_contains)
+      required_step_contains = unquote(required_step_contains)
+      next
+    }
+    /^[[:space:]]*required_expected_output_contains:[[:space:]]*/ {
+      required_expected_output_contains = $0
+      sub(/^[[:space:]]*required_expected_output_contains:[[:space:]]*/, "", required_expected_output_contains)
+      required_expected_output_contains = unquote(required_expected_output_contains)
+      next
+    }
     END {
       emit_case()
     }
@@ -139,22 +155,48 @@ extract_plan_scalar() {
   printf '%s\n' "$json" | sed -n "s/.*\"plan\":{.*\"$field\":\"\([^\"]*\)\".*/\1/p"
 }
 
+extract_plan_array_csv() {
+  local json="$1"
+  local field="$2"
+  local raw
+  raw="$(printf '%s\n' "$json" | sed -n "s/.*\"plan\":{.*\"$field\":\[\([^]]*\)\].*/\1/p")"
+  if [[ -z "$raw" ]]; then
+    printf '\n'
+    return 0
+  fi
+  printf '%s\n' "$raw" | sed 's/^"//; s/"$//' | sed 's/","/,/g' | sed 's/\\"/"/g'
+}
+
 plan_has_array_field() {
   local json="$1"
   local field="$2"
   printf '%s\n' "$json" | grep -q "\"plan\":{.*\"$field\":\["
 }
 
-extract_plan_array_count() {
-  local json="$1"
-  local field="$2"
-  local raw
-  raw="$(printf '%s\n' "$json" | sed -n "s/.*\"plan\":{.*\"$field\":\[\([^]]*\)\].*/\1/p")"
-  if [[ -z "$raw" ]]; then
+csv_count() {
+  local csv="${1:-}"
+  if [[ -z "$csv" ]]; then
     printf '0\n'
     return 0
   fi
-  printf '%s\n' "$raw" | sed 's/^"//; s/"$//' | sed 's/","/\n/g' | awk 'NF{c++} END{print c+0}'
+  printf '%s\n' "$csv" | tr ',' '\n' | awk 'NF{c++} END{print c+0}'
+}
+
+to_lower() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+contains_fragment_ci() {
+  local haystack="${1:-}"
+  local needle="${2:-}"
+  local haystack_lc
+  local needle_lc
+  if [[ -z "$needle" ]]; then
+    return 0
+  fi
+  haystack_lc="$(to_lower "$haystack")"
+  needle_lc="$(to_lower "$needle")"
+  [[ "$haystack_lc" == *"$needle_lc"* ]]
 }
 
 required_plan_arrays=(
@@ -171,7 +213,7 @@ total=0
 passed=0
 failed=0
 
-while IFS=$'\x1f' read -r case_id query task min_steps min_outputs; do
+while IFS=$'\x1f' read -r case_id query task min_steps min_outputs required_step_contains required_expected_output_contains; do
   [[ -z "$case_id" ]] && continue
   total=$((total + 1))
 
@@ -241,8 +283,10 @@ while IFS=$'\x1f' read -r case_id query task min_steps min_outputs; do
     continue
   fi
 
-  runnable_count="$(extract_plan_array_count "$output" "runnable_steps")"
-  expected_count="$(extract_plan_array_count "$output" "expected_outputs")"
+  runnable_steps_csv="$(extract_plan_array_csv "$output" "runnable_steps")"
+  expected_outputs_csv="$(extract_plan_array_csv "$output" "expected_outputs")"
+  runnable_count="$(csv_count "$runnable_steps_csv")"
+  expected_count="$(csv_count "$expected_outputs_csv")"
 
   if [[ "$runnable_count" -lt "$min_steps" ]]; then
     failed=$((failed + 1))
@@ -256,6 +300,26 @@ while IFS=$'\x1f' read -r case_id query task min_steps min_outputs; do
     echo "fail: $case_id" >&2
     echo "  expected_outputs too short: got=$expected_count expected_min=$min_outputs" >&2
     continue
+  fi
+
+  if [[ -n "$required_step_contains" ]]; then
+    if ! contains_fragment_ci "$runnable_steps_csv" "$required_step_contains"; then
+      failed=$((failed + 1))
+      echo "fail: $case_id" >&2
+      echo "  runnable_steps missing required fragment: $required_step_contains" >&2
+      echo "  runnable_steps: ${runnable_steps_csv:-none}" >&2
+      continue
+    fi
+  fi
+
+  if [[ -n "$required_expected_output_contains" ]]; then
+    if ! contains_fragment_ci "$expected_outputs_csv" "$required_expected_output_contains"; then
+      failed=$((failed + 1))
+      echo "fail: $case_id" >&2
+      echo "  expected_outputs missing required fragment: $required_expected_output_contains" >&2
+      echo "  expected_outputs: ${expected_outputs_csv:-none}" >&2
+      continue
+    fi
   fi
 
   passed=$((passed + 1))

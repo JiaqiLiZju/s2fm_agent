@@ -20,7 +20,11 @@ Use this skill to produce conservative AlphaGenome Python snippets and notebook 
 
 2. Build the client.
 - Import `genome` from `alphagenome.data` and `dna_client` from `alphagenome.models`.
-- Create the client with `dna_client.create(API_KEY)`.
+- Create the client with `dna_client.create(API_KEY, timeout=...)` to avoid indefinite hangs.
+- If `dna_client.create(...)` times out (`grpc.FutureTimeoutError`), retry with local proxy variables:
+  - `grpc_proxy=http://127.0.0.1:7890`
+  - `http_proxy=http://127.0.0.1:7890`
+  - `https_proxy=http://127.0.0.1:7890`
 
 3. Choose the prediction path.
 - Use `genome.Variant` plus `model.predict_variant(...)` when the task compares reference and alternate alleles.
@@ -36,6 +40,7 @@ Use this skill to produce conservative AlphaGenome Python snippets and notebook 
 5. Present the result.
 - Return a short runnable snippet first.
 - Add plotting only when the user asks to inspect predictions or compare reference and alternate tracks.
+- For real runs, persist a machine-readable summary (status, coordinates, REF/ALT, output paths, error if any) so agent retries are auditable.
 - Use [references/workflows.md](references/workflows.md) for code patterns and [references/caveats.md](references/caveats.md) for limits and troubleshooting.
 
 ## Grounded API Surface
