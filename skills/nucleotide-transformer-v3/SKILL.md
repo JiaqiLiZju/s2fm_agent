@@ -52,6 +52,60 @@ Use this skill for NTv3 only.
 8. Use the reusable track-prediction script for full workflows.
 - For region-level track prediction + plotting, prefer [scripts/run_track_prediction.py](scripts/run_track_prediction.py) instead of rewriting notebook cells.
 
+## Real Track Prediction Fastpath
+
+Use this path when the user asks for one real NTv3 track prediction run and wants directly executable commands.
+
+- Default model: `InstaDeepAI/NTv3_100M_post`.
+- Default output directory: `output/ntv3_results`.
+- CPU execution is acceptable when CUDA is unavailable.
+
+Preflight order (do not skip):
+
+1. `HF_TOKEN` availability from environment (for example via root `.env`).
+2. Gated model access check (`InstaDeepAI/NTv3_100M_post`).
+3. Runtime check with `conda run -n ntv3`.
+4. Network checks for UCSC sequence API and Hugging Face model fetch.
+
+Standard command template:
+
+```bash
+set -a; source .env; set +a
+mkdir -p output/ntv3_results
+conda run -n ntv3 python skills/nucleotide-transformer-v3/scripts/run_track_prediction.py \
+  --model InstaDeepAI/NTv3_100M_post \
+  --species human \
+  --assembly hg38 \
+  --chrom chr19 \
+  --start 6700000 \
+  --end 6732768 \
+  --output-dir output/ntv3_results \
+  2>&1 | tee output/ntv3_results/ntv3_run.log
+```
+
+Download-transport fallback (retry once):
+
+```bash
+set -a; source .env; set +a
+conda run -n ntv3 python skills/nucleotide-transformer-v3/scripts/run_track_prediction.py \
+  --model InstaDeepAI/NTv3_100M_post \
+  --species human \
+  --assembly hg38 \
+  --chrom chr19 \
+  --start 6700000 \
+  --end 6732768 \
+  --output-dir output/ntv3_results \
+  --disable-xet \
+  2>&1 | tee output/ntv3_results/ntv3_run.log
+```
+
+Acceptance checklist:
+
+- Log contains `loading config/tokenizer/model from HF`.
+- Log contains `saved plot:` and `saved meta:`.
+- `*_trackplot.png` exists.
+- `*_meta.json` exists with expected `species/assembly/chrom/start/end`.
+
 ## Grounded API Surface
 
 Treat the following HF tutorial names and patterns as grounded:
