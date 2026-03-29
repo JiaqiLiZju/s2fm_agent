@@ -24,6 +24,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--species", default="human", help="Species condition token.")
     parser.add_argument("--assembly", default="hg38", help="Genome assembly for UCSC API.")
+    parser.add_argument(
+        "--interval",
+        default=None,
+        help="Canonical alias for interval, e.g. chr19:6700000-6732768 (0-based [start, end)).",
+    )
     parser.add_argument("--chrom", default="chr19", help="Chromosome name.")
     parser.add_argument("--start", type=int, default=6_700_000, help="Start coordinate.")
     parser.add_argument("--end", type=int, default=6_732_768, help="End coordinate.")
@@ -34,7 +39,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output-dir",
-        default="nucleotide-transformer-v3/outputs",
+        default="output/ntv3",
         help="Directory for output plot and metadata JSON.",
     )
     parser.add_argument(
@@ -96,6 +101,7 @@ def choose_dtype(torch_mod, req: str, device: str):
 
 
 DNA_RE = re.compile(r"[^ACGTN]")
+INTERVAL_RE = re.compile(r"(chr[\w]+):([0-9_,]+)-([0-9_,]+)", flags=re.IGNORECASE)
 
 
 def sanitize_dna(sequence: str) -> str:
@@ -103,8 +109,32 @@ def sanitize_dna(sequence: str) -> str:
     return DNA_RE.sub("N", sequence.upper())
 
 
+def normalize_int_token(raw: str) -> int:
+    cleaned = re.sub(r"[_,\s]", "", raw)
+    if not cleaned.isdigit():
+        raise ValueError(f"Invalid integer token: {raw}")
+    return int(cleaned)
+
+
+def parse_interval_spec(spec: str) -> tuple[str, int, int]:
+    text = spec.strip()
+    match = INTERVAL_RE.fullmatch(text)
+    if not match:
+        raise ValueError(
+            f"Invalid --interval format: {spec}. Expected like chr19:6700000-6732768."
+        )
+    chrom = match.group(1)
+    start = normalize_int_token(match.group(2))
+    end = normalize_int_token(match.group(3))
+    return chrom, start, end
+
+
 def main() -> int:
     args = parse_args()
+    chrom = args.chrom
+    start = args.start
+    end = args.end
+    normalization_steps: list[str] = []
 
     if args.disable_xet:
         os.environ["HF_HUB_DISABLE_XET"] = "1"
@@ -114,7 +144,11 @@ def main() -> int:
     if not hf_token:
         raise SystemExit("HF token missing. Set HF_TOKEN or pass --hf-token.")
 
-    if args.end <= args.start:
+    if args.interval:
+        chrom, start, end = parse_interval_spec(args.interval)
+        normalization_steps.append("interval-overrides-chrom-start-end")
+
+    if end <= start:
         raise SystemExit("--end must be greater than --start")
 
     import matplotlib
@@ -150,7 +184,7 @@ def main() -> int:
 
     url = (
         "https://api.genome.ucsc.edu/getData/sequence"
-        f"?genome={args.assembly};chrom={args.chrom};start={args.start};end={args.end}"
+        f"?genome={args.assembly};chrom={chrom};start={start};end={end}"
     )
     resp = requests.get(url, timeout=60)
     resp.raise_for_status()
@@ -257,7 +291,7 @@ def main() -> int:
     window_len = seq_len
     predicted_len = int(bigwig.shape[0])
     center_offset = max((window_len - predicted_len) // 2, 0)
-    prediction_start = args.start + center_offset
+    prediction_start = start + center_offset
     prediction_end = prediction_start + predicted_len
 
     all_tracks = {**bigwig_tracks, **bed_probs}
@@ -280,7 +314,7 @@ def main() -> int:
         ax.fill_between(x, y)
         ax.set_title(title)
         sns.despine(ax=ax, top=True, right=True, bottom=True)
-    axes[-1].set_xlabel(f"{args.chrom}:{prediction_start}-{prediction_end} ({args.assembly})")
+    axes[-1].set_xlabel(f"{chrom}:{prediction_start}-{prediction_end} ({args.assembly})")
 
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -289,24 +323,40 @@ def main() -> int:
         prefix = args.output_prefix
     else:
         prefix = (
-            f"ntv3_{args.species}_{args.assembly}_{args.chrom}_"
-            f"{args.start}_{args.end}"
+            f"ntv3_{args.species}_{args.assembly}_{chrom}_{start}_{end}"
         )
 
     plot_path = out_dir / f"{prefix}_trackplot.png"
-    meta_path = out_dir / f"{prefix}_meta.json"
+    meta_path = out_dir / f"{prefix}_result.json"
 
     plt.tight_layout()
     plt.savefig(plot_path, dpi=180)
     plt.close(fig)
 
     meta = {
+        "skill_id": "nucleotide-transformer-v3",
+        "task": "track-prediction",
         "model_name": args.model,
         "species": args.species,
         "assembly": args.assembly,
-        "chrom": args.chrom,
-        "start": args.start,
-        "end": args.end,
+        "chrom": chrom,
+        "start": start,
+        "end": end,
+        "coordinate_convention": "[start, end) zero-based",
+        "input_normalization": {
+            "interval_raw": args.interval,
+            "chrom_raw": args.chrom,
+            "start_raw": args.start,
+            "end_raw": args.end,
+            "normalization_steps": normalization_steps,
+        },
+        "resolved_inputs": {
+            "species": args.species,
+            "assembly": args.assembly,
+            "chrom": chrom,
+            "start": start,
+            "end": end,
+        },
         "sequence_length_original": orig_len,
         "sequence_length_used": seq_len,
         "num_downsamples": num_downsamples,
@@ -321,6 +371,11 @@ def main() -> int:
         "bed_shape": list(bed_logits.shape),
         "tracks_plotted": list(all_tracks.keys()),
         "plot_path": str(plot_path),
+        "outputs": {
+            "plot": str(plot_path),
+            "npz": None,
+            "result_json": str(meta_path),
+        },
     }
 
     with meta_path.open("w") as f:

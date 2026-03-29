@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.error
@@ -111,11 +112,63 @@ def build_interval(position_1based: int, width: int) -> tuple[int, int]:
     return start, end
 
 
+def normalize_position_token(raw: str) -> int:
+    cleaned = re.sub(r"[_,\s]", "", raw)
+    if not cleaned.isdigit():
+        raise ValueError(f"Invalid position token: {raw}")
+    return int(cleaned)
+
+
+def parse_coordinate_spec(spec: str) -> tuple[str, int]:
+    text = spec.strip()
+    match = re.fullmatch(r"(chr[\w]+):([0-9_,]+)", text, flags=re.IGNORECASE)
+    if not match:
+        raise ValueError(
+            f"Invalid --coordinate format: {spec}. Expected like chr12:1000000 (1-based)."
+        )
+    chrom = match.group(1)
+    position = normalize_position_token(match.group(2))
+    return chrom, position
+
+
+def parse_variant_spec(spec: str) -> tuple[str, int, str]:
+    text = spec.strip().replace(" ", "")
+    with_ref = re.fullmatch(
+        r"(chr[\w]+):([0-9_,]+):?([ACGTNacgtn])>([ACGTNacgtn])", text
+    )
+    if with_ref:
+        chrom = with_ref.group(1)
+        position = normalize_position_token(with_ref.group(2))
+        alt = with_ref.group(4).upper()
+        return chrom, position, alt
+
+    no_ref = re.fullmatch(r"(chr[\w]+):([0-9_,]+):([ACGTNacgtn])", text)
+    if no_ref:
+        chrom = no_ref.group(1)
+        position = normalize_position_token(no_ref.group(2))
+        alt = no_ref.group(3).upper()
+        return chrom, position, alt
+
+    raise ValueError(
+        f"Invalid --variant-spec format: {spec}. Expected chr12:1000000:G or chr12:1000000:T>G."
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run AlphaGenome predict_variant once and save artifacts.")
     parser.add_argument("--chrom", default="chr12", help="Chromosome, default: chr12")
     parser.add_argument("--position", type=int, default=1_000_000, help="1-based position, default: 1000000")
     parser.add_argument("--alt", default="G", help="ALT base, default: G")
+    parser.add_argument(
+        "--coordinate",
+        default=None,
+        help="Canonical alias for chromosome + 1-based position, e.g. chr12:1000000",
+    )
+    parser.add_argument(
+        "--variant-spec",
+        default=None,
+        help="Canonical alias for variant, e.g. chr12:1000000:G or chr12:1000000:T>G",
+    )
     parser.add_argument("--assembly", default="hg38", help="Genome assembly for UCSC lookup, default: hg38")
     parser.add_argument(
         "--output-dir",
@@ -136,51 +189,88 @@ def main() -> int:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    chrom = args.chrom
+    position = int(args.position)
     alt = args.alt.upper()
+    normalization_steps: list[str] = []
+
+    if args.coordinate:
+        chrom, position = parse_coordinate_spec(args.coordinate)
+        normalization_steps.append("coordinate-overrides-chrom-position")
+
+    if args.variant_spec:
+        chrom, position, alt = parse_variant_spec(args.variant_spec)
+        normalization_steps.append("variant-spec-overrides-chrom-position-alt")
+
     if len(alt) != 1 or alt not in {"A", "C", "G", "T", "N"}:
-        raise ValueError(f"ALT must be a single base in A/C/G/T/N. Got: {args.alt}")
+        raise ValueError(f"ALT must be a single base in A/C/G/T/N. Got: {alt}")
 
     ref = "NA"
     interval_start = None
     interval_end = None
-    summary_path = output_dir / f"{args.chrom}_{args.position}_NA_to_{alt}_summary.json"
-    plot_path = output_dir / f"{args.chrom}_{args.position}_NA_to_{alt}_rnaseq_overlay.png"
+    summary_path = output_dir / f"alphagenome_variant-effect_{chrom}_{position}_NA_to_{alt}_result.json"
+    plot_path = output_dir / f"alphagenome_variant-effect_{chrom}_{position}_NA_to_{alt}_rnaseq_overlay.png"
     install_action = "not_checked"
     dotenv_source = "unknown"
     requested_outputs = ["RNA_SEQ"]
     ontology_terms = ["UBERON:0001157"]
     summary = {
+        "skill_id": "alphagenome-api",
+        "task": "variant-effect",
         "run_time_utc": utc_now_iso(),
         "env_prefix": sys.prefix,
         "alphagenome_version": None,
         "assembly": args.assembly,
-        "chrom": args.chrom,
-        "position": args.position,
+        "chrom": chrom,
+        "position": position,
         "ref": ref,
         "alt": alt,
         "interval_start": interval_start,
         "interval_end": interval_end,
         "interval_width": 16_384,
+        "coordinate_convention": {
+            "single_site_position": "1-based",
+            "interval": "0-based [start, end)",
+        },
+        "input_normalization": {
+            "coordinate_raw": args.coordinate,
+            "variant_spec_raw": args.variant_spec,
+            "chrom_raw": args.chrom,
+            "position_raw": args.position,
+            "alt_raw": args.alt,
+            "normalization_steps": normalization_steps,
+        },
+        "resolved_inputs": {
+            "assembly": args.assembly,
+            "chrom": chrom,
+            "position": position,
+            "alt": alt,
+        },
         "requested_outputs": requested_outputs,
         "ontology_terms": ontology_terms,
         "install_action": install_action,
         "api_key_source": dotenv_source,
         "plot_path": str(plot_path),
         "summary_path": str(summary_path),
+        "outputs": {
+            "plot": str(plot_path),
+            "npz": None,
+            "result_json": str(summary_path),
+        },
         "status": "running",
         "error": None,
     }
 
     try:
-        ref = fetch_reference_base(args.assembly, args.chrom, args.position)
+        ref = fetch_reference_base(args.assembly, chrom, position)
         summary["ref"] = ref
-        summary_path = output_dir / f"{args.chrom}_{args.position}_{ref}_to_{alt}_summary.json"
-        plot_path = output_dir / f"{args.chrom}_{args.position}_{ref}_to_{alt}_rnaseq_overlay.png"
+        summary_path = output_dir / f"alphagenome_variant-effect_{chrom}_{position}_{ref}_to_{alt}_result.json"
+        plot_path = output_dir / f"alphagenome_variant-effect_{chrom}_{position}_{ref}_to_{alt}_rnaseq_overlay.png"
         summary["plot_path"] = str(plot_path)
         summary["summary_path"] = str(summary_path)
         if alt == ref:
             raise ValueError(
-                f"ALT equals REF ({alt}) at {args.chrom}:{args.position}; this is not a mutation."
+                f"ALT equals REF ({alt}) at {chrom}:{position}; this is not a mutation."
             )
 
         install_action = ensure_alphagenome_installed()
@@ -192,9 +282,11 @@ def main() -> int:
         summary["api_key_source"] = dotenv_source
         log("[INFO] loaded ALPHAGENOME_API_KEY from environment/.env")
 
-        interval_start, interval_end = build_interval(args.position, 16_384)
+        interval_start, interval_end = build_interval(position, 16_384)
         summary["interval_start"] = interval_start
         summary["interval_end"] = interval_end
+        summary["resolved_inputs"]["interval_start"] = interval_start
+        summary["resolved_inputs"]["interval_end"] = interval_end
 
         import matplotlib
 
@@ -207,10 +299,10 @@ def main() -> int:
         model = dna_client.create(api_key, timeout=args.request_timeout_sec)
         log("[INFO] AlphaGenome client created successfully")
 
-        interval = genome.Interval(chromosome=args.chrom, start=interval_start, end=interval_end)
+        interval = genome.Interval(chromosome=chrom, start=interval_start, end=interval_end)
         variant = genome.Variant(
-            chromosome=args.chrom,
-            position=args.position,
+            chromosome=chrom,
+            position=position,
             reference_bases=ref,
             alternate_bases=alt,
         )
@@ -233,7 +325,7 @@ def main() -> int:
             ],
             interval=outputs.reference.rna_seq.interval,
             annotations=[plot_components.VariantAnnotation([variant], alpha=0.8)],
-            title=f"AlphaGenome RNA-seq overlay {args.chrom}:{args.position} {ref}>{alt}",
+            title=f"AlphaGenome RNA-seq overlay {chrom}:{position} {ref}>{alt}",
         )
         fig.savefig(plot_path, dpi=200, bbox_inches="tight")
         plt.close(fig)
@@ -247,13 +339,29 @@ def main() -> int:
         raise
     finally:
         summary["run_time_utc"] = utc_now_iso()
+        summary["chrom"] = chrom
+        summary["position"] = position
+        summary["alt"] = alt
         summary["ref"] = ref
         summary["interval_start"] = interval_start
         summary["interval_end"] = interval_end
         summary["install_action"] = install_action
         summary["api_key_source"] = dotenv_source
+        summary["resolved_inputs"] = {
+            "assembly": args.assembly,
+            "chrom": chrom,
+            "position": position,
+            "alt": alt,
+            "interval_start": interval_start,
+            "interval_end": interval_end,
+        }
         summary["summary_path"] = str(summary_path)
         summary["plot_path"] = str(plot_path)
+        summary["outputs"] = {
+            "plot": str(plot_path),
+            "npz": None,
+            "result_json": str(summary_path),
+        }
         summary_path.write_text(json.dumps(summary, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
         log(f"[INFO] saved summary: {summary_path}")
 

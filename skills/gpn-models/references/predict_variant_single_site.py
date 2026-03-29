@@ -73,9 +73,14 @@ def parse_args() -> argparse.Namespace:
         help="HTTP timeout (seconds) for UCSC sequence API",
     )
     parser.add_argument(
+        "--output-dir",
+        default="output/gpn-models",
+        help="Output directory for result JSON. Default: output/gpn-models.",
+    )
+    parser.add_argument(
         "--output-json",
         default=None,
-        help="Optional JSON output path",
+        help="Explicit JSON output path (overrides --output-dir derived path).",
     )
     return parser.parse_args()
 
@@ -184,6 +189,8 @@ def main() -> None:
     llr_mean = (llr_fwd + llr_rev) / 2.0
 
     result = {
+        "skill_id": "gpn-models",
+        "task": "variant-effect",
         "model": args.model_id,
         "genome": args.genome,
         "chrom": args.chrom,
@@ -204,11 +211,22 @@ def main() -> None:
     }
 
     if args.output_json:
-        output_dir = os.path.dirname(args.output_json)
-        if output_dir:
-            os.makedirs(output_dir, exist_ok=True)
-        with open(args.output_json, "w", encoding="utf-8") as handle:
-            json.dump(result, handle, indent=2)
+        out_path = args.output_json
+    else:
+        out_path = os.path.join(
+            args.output_dir,
+            f"gpn_variant-effect_{args.chrom}_{args.pos}_{result['ref']}_to_{result['alt']}_result.json",
+        )
+    out_dir = os.path.dirname(out_path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+    result["outputs"] = {
+        "plot": None,
+        "npz": None,
+        "result_json": out_path,
+    }
+    with open(out_path, "w", encoding="utf-8") as handle:
+        json.dump(result, handle, indent=2)
 
     print(json.dumps(result, indent=2))
 

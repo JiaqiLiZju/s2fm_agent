@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,26 @@ from transformers import AutoModel, AutoTokenizer
 from transformers.models.bert.configuration_bert import BertConfig
 
 
+def normalize_int_token(raw: str) -> int:
+    cleaned = re.sub(r"[_,\s]", "", raw)
+    if not cleaned.isdigit():
+        raise ValueError(f"Invalid integer token: {raw}")
+    return int(cleaned)
+
+
+def parse_interval_spec(spec: str) -> tuple[str, int, int]:
+    text = spec.strip()
+    match = re.fullmatch(r"(chr[\w]+):([0-9_,]+)-([0-9_,]+)", text, flags=re.IGNORECASE)
+    if not match:
+        raise ValueError(
+            f"Invalid --interval format: {spec}. Expected like chr19:6700000-6732768"
+        )
+    chrom = match.group(1)
+    start = normalize_int_token(match.group(2))
+    end = normalize_int_token(match.group(3))
+    return chrom, start, end
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -34,9 +55,14 @@ def parse_args() -> argparse.Namespace:
         default="hg38",
         help="Genome assembly for UCSC API query (example: hg38).",
     )
-    parser.add_argument("--chrom", required=True, help="Chromosome name (example: chr19).")
-    parser.add_argument("--start", required=True, type=int, help="0-based inclusive start.")
-    parser.add_argument("--end", required=True, type=int, help="0-based exclusive end.")
+    parser.add_argument(
+        "--interval",
+        default=None,
+        help="Canonical alias for interval, e.g. chr19:6700000-6732768 (0-based [start, end)).",
+    )
+    parser.add_argument("--chrom", default=None, help="Chromosome name (example: chr19).")
+    parser.add_argument("--start", default=None, type=int, help="0-based inclusive start.")
+    parser.add_argument("--end", default=None, type=int, help="0-based exclusive end.")
     parser.add_argument(
         "--model-id",
         default="zhihan1996/DNABERT-2-117M",
@@ -44,18 +70,18 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output-dir",
-        default=".",
-        help="Output directory for plot + metadata. Default: current directory.",
+        default="output/dnabert2",
+        help="Output directory for plot + metadata. Default: output/dnabert2.",
     )
     parser.add_argument(
         "--plot-name",
-        default="embedding_pca.png",
-        help="Output PCA image filename. Default: embedding_pca.png",
+        default=None,
+        help="Output PCA image filename. Default: derived from prefix.",
     )
     parser.add_argument(
         "--metadata-name",
-        default="run_metadata.json",
-        help="Output metadata filename. Default: run_metadata.json",
+        default=None,
+        help="Output metadata filename. Default: derived from prefix.",
     )
     parser.add_argument(
         "--save-token-embeddings",
@@ -165,15 +191,31 @@ def main() -> int:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    chrom = args.chrom
+    start = args.start
+    end = args.end
+    normalization_steps: list[str] = []
+
+    if args.interval:
+        chrom, start, end = parse_interval_spec(args.interval)
+        normalization_steps.append("interval-overrides-chrom-start-end")
+
+    if chrom is None or start is None or end is None:
+        raise SystemExit(
+            "Missing coordinates. Provide --interval or all of --chrom --start --end."
+        )
+
+    prefix = f"dnabert2_embedding_{chrom}_{start}_{end}"
+
     sequence, source_url = fetch_sequence(
         assembly=args.assembly,
-        chrom=args.chrom,
-        start=args.start,
-        end=args.end,
+        chrom=chrom,
+        start=start,
+        end=end,
         timeout=args.timeout,
     )
 
-    expected_len = args.end - args.start
+    expected_len = end - start
     if len(sequence) != expected_len:
         raise RuntimeError(
             f"Fetched sequence length mismatch: expected {expected_len}, got {len(sequence)}"
@@ -189,23 +231,42 @@ def main() -> int:
     coords = pca.fit_transform(token_emb)
     explained = pca.explained_variance_ratio_
 
-    plot_path = output_dir / args.plot_name
+    plot_name = args.plot_name or f"{prefix}_plot.png"
+    plot_path = output_dir / plot_name
     plot_title = (
         "DNABERT2 token embeddings PCA\n"
-        f"{args.chrom}:{args.start}-{args.end} ({args.assembly}, {args.species})"
+        f"{chrom}:{start}-{end} ({args.assembly}, {args.species})"
     )
     make_plot(coords, explained, plot_title, plot_path)
 
     if args.save_token_embeddings:
-        np.save(output_dir / "token_embeddings.npy", token_emb)
+        np.save(output_dir / f"{prefix}_token_embeddings.npy", token_emb)
+
+    metadata_name = args.metadata_name or f"{prefix}_result.json"
+    metadata_path = output_dir / metadata_name
 
     metadata = {
+        "skill_id": "dnabert2",
+        "task": "embedding",
         "species": args.species,
         "assembly": args.assembly,
-        "chrom": args.chrom,
-        "start": args.start,
-        "end": args.end,
+        "chrom": chrom,
+        "start": start,
+        "end": end,
         "coordinate_convention": "[start, end) zero-based",
+        "input_normalization": {
+            "interval_raw": args.interval,
+            "chrom_raw": args.chrom,
+            "start_raw": args.start,
+            "end_raw": args.end,
+            "normalization_steps": normalization_steps,
+        },
+        "resolved_inputs": {
+            "assembly": args.assembly,
+            "chrom": chrom,
+            "start": start,
+            "end": end,
+        },
         "sequence_source": "UCSC API",
         "sequence_source_url": source_url,
         "sequence_length_bp": len(sequence),
@@ -216,9 +277,13 @@ def main() -> int:
         "embedding_dim": int(token_emb.shape[1]),
         "pca_explained_variance_ratio": [float(explained[0]), float(explained[1])],
         "plot_path": str(plot_path),
+        "outputs": {
+            "plot": str(plot_path),
+            "npz": None,
+            "result_json": str(metadata_path),
+        },
     }
 
-    metadata_path = output_dir / args.metadata_name
     metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     print(json.dumps(metadata, indent=2))
     return 0

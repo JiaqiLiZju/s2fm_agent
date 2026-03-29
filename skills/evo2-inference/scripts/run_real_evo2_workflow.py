@@ -18,6 +18,7 @@ import base64
 import io
 import json
 import os
+import re
 import time
 import zipfile
 from pathlib import Path
@@ -32,6 +33,50 @@ UCSC_BASE = "https://api.genome.ucsc.edu/getData/sequence"
 EVO2_MODEL = "evo2-7b"
 EVO2_BASE = f"https://health.api.nvidia.com/v1/biology/arc/{EVO2_MODEL}"
 EVO2_GENERATE_FALLBACK_BASE = "https://health.api.nvidia.com/v1/biology/arc/evo2-40b"
+INTERVAL_RE = re.compile(r"(chr[\w]+):([0-9_,]+)-([0-9_,]+)", flags=re.IGNORECASE)
+COORD_RE = re.compile(r"(chr[\w]+):([0-9_,]+)", flags=re.IGNORECASE)
+
+
+def normalize_int_token(raw: str) -> int:
+    cleaned = re.sub(r"[_,\s]", "", raw)
+    if not cleaned.isdigit():
+        raise ValueError(f"Invalid integer token: {raw}")
+    return int(cleaned)
+
+
+def parse_interval_0based(spec: str) -> tuple[str, int, int]:
+    text = spec.strip()
+    match = INTERVAL_RE.fullmatch(text)
+    if not match:
+        raise ValueError(
+            f"Invalid --interval format: {spec}. Expected like chr19:6700000-6732768."
+        )
+    chrom = match.group(1)
+    start = normalize_int_token(match.group(2))
+    end = normalize_int_token(match.group(3))
+    if end <= start:
+        raise ValueError("Interval end must be greater than start")
+    return chrom, start, end
+
+
+def parse_coordinate_1based(spec: str) -> tuple[str, int]:
+    text = spec.strip()
+    match = COORD_RE.fullmatch(text)
+    if not match:
+        raise ValueError(
+            f"Invalid --variant-coordinate format: {spec}. Expected like chr12:1000000."
+        )
+    chrom = match.group(1)
+    position = normalize_int_token(match.group(2))
+    if position <= 0:
+        raise ValueError("Variant position must be positive (1-based).")
+    return chrom, position
+
+
+def normalize_chrom_for_workflow(chrom: str) -> str:
+    if chrom.lower().startswith("chr"):
+        return chrom[3:]
+    return chrom
 
 
 def fetch_hg38_sequence(chrom: str, start_1based: int, end_1based: int) -> str:
@@ -246,6 +291,8 @@ def run_interval_workflow(
     plt.close(fig)
 
     return {
+        "skill_id": "evo2-inference",
+        "task": "embedding",
         "model": EVO2_MODEL,
         "assembly": "hg38",
         "chrom": chrom,
@@ -261,6 +308,11 @@ def run_interval_workflow(
         "generation_model_used": generation_model,
         "generation_sampled_probs_mean": float(np.mean(sampled_probs)) if sampled_probs.size else None,
         "plot_path": str(plot_path),
+        "outputs": {
+            "plot": str(plot_path),
+            "npz": None,
+            "result_json": None,
+        },
     }
 
 
@@ -333,6 +385,8 @@ def run_variant_workflow(
     plt.close(fig)
 
     return {
+        "skill_id": "evo2-inference",
+        "task": "variant-effect",
         "model": EVO2_MODEL,
         "assembly": "hg38",
         "chrom": chrom,
@@ -345,6 +399,11 @@ def run_variant_workflow(
         "delta_top1_at_variant": float(delta_top1[variant_index]),
         "delta_emb_norm_at_variant": float(delta_emb_norm[variant_index]),
         "plot_path": str(plot_path),
+        "outputs": {
+            "plot": str(plot_path),
+            "npz": None,
+            "result_json": None,
+        },
     }
 
 
@@ -352,7 +411,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run real Evo2 hosted workflows with plots.")
     parser.add_argument(
         "--output-dir",
-        default="evo2-inference/results",
+        default="output/evo2",
         help="Directory for generated plots and JSON outputs.",
     )
     parser.add_argument(
@@ -367,6 +426,16 @@ def parse_args() -> argparse.Namespace:
         default=2048,
         help="Window length around variant for REF/ALT comparison (even number).",
     )
+    parser.add_argument(
+        "--interval",
+        default="chr19:6700000-6732768",
+        help="Canonical interval alias for interval workflow, 0-based [start, end).",
+    )
+    parser.add_argument(
+        "--variant-coordinate",
+        default="chr12:1000000",
+        help="Canonical coordinate alias for variant workflow, 1-based single-site coordinate.",
+    )
     return parser.parse_args()
 
 
@@ -380,12 +449,19 @@ def main() -> int:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    interval_chrom_raw, interval_start_0based, interval_end_0based = parse_interval_0based(
+        args.interval
+    )
+    variant_chrom_raw, variant_position_1based = parse_coordinate_1based(args.variant_coordinate)
+    interval_chrom = normalize_chrom_for_workflow(interval_chrom_raw)
+    variant_chrom = normalize_chrom_for_workflow(variant_chrom_raw)
+
     print(f"[run] model={EVO2_MODEL}", flush=True)
     interval_result = run_interval_workflow(
         api_key=api_key,
-        chrom="19",
-        start_0based=6_700_000,
-        end_0based=6_732_768,
+        chrom=interval_chrom,
+        start_0based=interval_start_0based,
+        end_0based=interval_end_0based,
         output_dir=output_dir,
         chunk_size=args.interval_chunk_size,
     )
@@ -393,17 +469,47 @@ def main() -> int:
     print("[run] interval workflow done", flush=True)
     variant_result = run_variant_workflow(
         api_key=api_key,
-        chrom="12",
-        position_1based=1_000_000,
+        chrom=variant_chrom,
+        position_1based=variant_position_1based,
         output_dir=output_dir,
         window_len=args.variant_window_len,
     )
 
     result = {
+        "coordinate_convention": {
+            "interval": "0-based [start, end)",
+            "variant_position": "1-based",
+        },
+        "input_normalization": {
+            "interval_raw": args.interval,
+            "variant_coordinate_raw": args.variant_coordinate,
+            "interval_chrom_raw": interval_chrom_raw,
+            "variant_chrom_raw": variant_chrom_raw,
+            "normalization_steps": [
+                "interval-coordinate-parsed",
+                "variant-coordinate-parsed",
+                "chrom-normalized-by-removing-chr-prefix-for-ensembl-paths",
+            ],
+        },
+        "resolved_inputs": {
+            "interval": {
+                "chrom": interval_chrom,
+                "start_0based": interval_start_0based,
+                "end_0based": interval_end_0based,
+            },
+            "variant": {
+                "chrom": variant_chrom,
+                "position_1based": variant_position_1based,
+                "window_len": args.variant_window_len,
+            },
+        },
         "interval_forward_embeddings_generation": interval_result,
         "variant_effect_proxy": variant_result,
     }
     json_path = output_dir / "evo2_real_workflow_results.json"
+    # backfill result_json now that path is known
+    result["interval_forward_embeddings_generation"]["outputs"]["result_json"] = str(json_path)
+    result["variant_effect_proxy"]["outputs"]["result_json"] = str(json_path)
     json_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
 
     print(f"model={EVO2_MODEL}")
