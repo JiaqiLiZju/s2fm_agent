@@ -74,7 +74,7 @@ When task + inputs are complete (assembly/chrom/position/ALT), prefer running:
 
 ```bash
 set -a; source .env; set +a
-conda run -n alphagenome-py310 \
+conda run -p /path/to/alphagenome-py310-env \
   python skills/alphagenome-api/scripts/run_alphagenome_predict_variant.py \
   --chrom chr12 \
   --position 1000000 \
@@ -83,6 +83,11 @@ conda run -n alphagenome-py310 \
   --output-dir output/alphagenome
 ```
 
+Environment selection priority:
+
+1. Prefer `conda run -p <env_prefix>` when the prefix exists and contains `bin/python`.
+2. Otherwise fall back to `conda run -n alphagenome-py310`.
+
 If client creation fails with `grpc.FutureTimeoutError`, retry via proxy:
 
 ```bash
@@ -90,7 +95,7 @@ set -a; source .env; set +a
 grpc_proxy=http://127.0.0.1:7890 \
 http_proxy=http://127.0.0.1:7890 \
 https_proxy=http://127.0.0.1:7890 \
-conda run -n alphagenome-py310 \
+conda run -p /path/to/alphagenome-py310-env \
   python skills/alphagenome-api/scripts/run_alphagenome_predict_variant.py \
   --chrom chr12 \
   --position 1000000 \

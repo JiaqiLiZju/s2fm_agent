@@ -20,6 +20,7 @@ Use this skill to produce conservative AlphaGenome Python snippets and notebook 
 
 2. Build the client.
 - Import `genome` from `alphagenome.data` and `dna_client` from `alphagenome.models`.
+- Prefer resolving a valid conda env prefix first (`conda run -p <prefix>`); fall back to env name (`conda run -n alphagenome-py310`) only when no usable prefix is found.
 - Create the client with `dna_client.create(API_KEY, timeout=...)` to avoid indefinite hangs.
 - If `dna_client.create(...)` times out (`grpc.FutureTimeoutError`), retry with local proxy variables:
   - `grpc_proxy=http://127.0.0.1:7890`

@@ -4,3 +4,4 @@ output/
 skills-dev/
 DEVELOPMENT_PLAN.md
 DEVELOPMENT_PROGRESS.md
+.env

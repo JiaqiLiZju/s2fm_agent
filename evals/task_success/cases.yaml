@@ -33,5 +33,5 @@ cases:
     task: variant-effect
     min_runnable_steps: 1
     min_expected_outputs: 3
-    required_step_contains: "conda run -n alphagenome-py310 python skills/alphagenome-api/scripts/run_alphagenome_predict_variant.py"
+    required_step_contains: "python skills/alphagenome-api/scripts/run_alphagenome_predict_variant.py"
     required_expected_output_contains: "output/alphagenome"
