@@ -72,5 +72,6 @@ cases:
     task: variant-effect
   - id: route_015
     query: "Use $skill-factory to scaffold a new skill from a JSON spec."
-    expected_decision: clarify
-    expected_clarify_contains: "which skill should lead"
+    expected_primary_skill: skill-factory
+    expected_secondary_skills: []
+    task: skill-scaffold

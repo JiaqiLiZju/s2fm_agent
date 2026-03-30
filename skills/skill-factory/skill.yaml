@@ -15,13 +15,14 @@ triggers:
   - create-skill
   - generate-skill
 required_inputs:
-  - spec-json
+  - task-objective
 optional_inputs:
-  - output-root
-  - overwrite
-  - registry-update
-  - include-references
-  - include-real-run-script
+  - output-dir
+  - runtime-context
+input_mappings:
+  - task-objective|query_tokens=scaffold,create,generate,build,skill,spec|script_flags=--spec
+  - output-dir|query_tokens=output,output-root,skills-dev,dev,stable|script_flags=--output-root
+  - runtime-context|query_tokens=overwrite,replace,regenerate,no-register,register|script_flags=--overwrite
 constraints:
   - skill-id-must-be-lowercase-hyphen-case
   - generated-skill-must-include-skill-md-skill-yaml-openai-yaml
