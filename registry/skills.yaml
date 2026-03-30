@@ -135,8 +135,8 @@ skills:
       - segmentenformer
       - segmentborzoi
   - id: skill-factory
-    path: skills-dev/skill-factory
-    enabled: false
+    path: skills/skill-factory
+    enabled: true
     family: skilling-and-scaffolding
     tasks:
       - skill-scaffold
