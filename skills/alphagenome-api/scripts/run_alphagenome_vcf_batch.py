@@ -30,6 +30,9 @@ from datetime import datetime, timezone
 from importlib import metadata
 from pathlib import Path
 
+DEFAULT_PROXY_URL = "http://127.0.0.1:7890"
+PROXY_ENV_KEYS = ("grpc_proxy", "http_proxy", "https_proxy")
+
 
 def load_tissue_dict(tissues_arg: str | None) -> dict[str, str]:
     """Return tissue dict from --tissues argument or interactive confirmation.
@@ -106,6 +109,37 @@ def ensure_alphagenome_installed() -> None:
         pass
     log("[INFO] Installing alphagenome...")
     subprocess.check_call([sys.executable, "-m", "pip", "install", "alphagenome"])
+
+
+def _has_proxy_env() -> bool:
+    return any(os.environ.get(key, "").strip() for key in PROXY_ENV_KEYS)
+
+
+def _set_proxy_env(proxy_url: str) -> None:
+    for key in PROXY_ENV_KEYS:
+        os.environ[key] = proxy_url
+
+
+def create_client_with_retry(dna_client, api_key: str, timeout: float, proxy_url: str | None):
+    import grpc
+
+    try:
+        model = dna_client.create(api_key, timeout=timeout)
+        log("[INFO] AlphaGenome client created")
+        return model
+    except grpc.FutureTimeoutError:
+        if not proxy_url:
+            raise
+        if _has_proxy_env():
+            raise
+        log(
+            f"[WARN] dna_client.create timed out after {timeout}s; "
+            f"retrying with proxy vars = {proxy_url}"
+        )
+        _set_proxy_env(proxy_url)
+        model = dna_client.create(api_key, timeout=timeout)
+        log("[INFO] AlphaGenome client created (proxy retry)")
+        return model
 
 
 SUPPORTED_WIDTHS = {16_384, 131_072, 524_288, 1_048_576}
@@ -190,10 +224,9 @@ def run_batch(
     timeout: float,
     delay: float,
     resume: bool,
+    proxy_url: str | None,
 ) -> list[dict]:
     import numpy as np
-    import matplotlib
-    matplotlib.use("Agg")
     from alphagenome.data import genome
     from alphagenome.models import dna_client
 
@@ -228,8 +261,7 @@ def run_batch(
     failed = 0
 
     try:
-        model = dna_client.create(api_key, timeout=timeout)
-        log("[INFO] AlphaGenome client created")
+        model = create_client_with_retry(dna_client, api_key, timeout, proxy_url)
         log(f"[INFO] Tissues: {tissue_names}")
 
         for i, v in enumerate(variants):
@@ -342,7 +374,16 @@ def parse_args() -> argparse.Namespace:
                    help="Tissue config: path to JSON file or inline JSON {name: ontology_curie}. "
                         "Omit to confirm interactively.")
     p.add_argument("--non-interactive", action="store_true",
-                   help="Skip tissue confirmation prompt; use default tissues")
+                   help="Use default tissues without interactive prompt")
+    p.add_argument(
+        "--proxy-url",
+        default=os.environ.get("ALPHAGENOME_PROXY_URL", DEFAULT_PROXY_URL),
+        help=(
+            "Proxy URL for one automatic retry when dna_client.create times out "
+            "(default: env ALPHAGENOME_PROXY_URL or http://127.0.0.1:7890). "
+            "Set to empty string to disable retry."
+        ),
+    )
     return p.parse_args()
 
 
@@ -361,8 +402,10 @@ def main() -> int:
         variants = variants[:args.limit]
     log(f"[INFO] Loaded {len(variants)} variants from {vcf_path} ({len(info_keys)} INFO keys)")
 
-    if args.non_interactive or args.tissues:
+    if args.tissues:
         tissue_dict = load_tissue_dict(args.tissues)
+    elif args.non_interactive:
+        tissue_dict = DEFAULT_TISSUE_DICT.copy()
     else:
         tissue_dict = load_tissue_dict(None)  # interactive prompt
     log(f"[INFO] Tissues ({len(tissue_dict)}): {list(tissue_dict.keys())}")
@@ -372,10 +415,14 @@ def main() -> int:
     log("[INFO] API key loaded")
     log(f"[INFO] alphagenome version: {metadata.version('alphagenome')}")
 
+    proxy_url = args.proxy_url.strip() if args.proxy_url is not None else ""
+    if not proxy_url:
+        proxy_url = None
+
     summaries = run_batch(
         variants, info_keys, tissue_dict, args.assembly, args.interval_width,
         output_dir, output_name, api_key,
-        args.request_timeout_sec, args.delay, args.resume,
+        args.request_timeout_sec, args.delay, args.resume, proxy_url,
     )
 
     failed = [s for s in summaries if s["status"] != "success"]

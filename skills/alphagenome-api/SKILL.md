@@ -77,6 +77,8 @@ Use `scripts/run_alphagenome_vcf_batch.py` for multi-variant, multi-tissue batch
 - Transparently passes through all VCF INFO fields as output columns (two-pass collection)
 - Adds `variant_type` column (SNP / INS / DEL / MNP)
 - Outputs per-tissue `{tissue}_mean_diff` and `{tissue}_log2fc` for all 8 tissues in `TISSUE_DICT`
+- `--non-interactive` now always uses default 8 tissues without prompting
+- Automatically retries once with proxy vars when `dna_client.create` times out (`grpc_proxy/http_proxy/https_proxy`)
 - Supports `--resume` (skip already-completed variants), `--limit N` (debug subset), `--interval-width` (16384 / 131072 / 524288 / 1048576)
 
 **Invocation:**
@@ -86,7 +88,8 @@ python skills/alphagenome-api/scripts/run_alphagenome_vcf_batch.py \
   --assembly hg38 \
   --output-dir output/alphagenome \
   [--tissues path/to/tissues.json]  # or inline JSON, or omit for interactive prompt
-  [--non-interactive]               # skip prompt, use default 8 tissues
+  [--non-interactive]               # no prompt, force default 8 tissues
+  [--proxy-url http://127.0.0.1:7890]  # retry proxy for client-create timeout
   [--interval-width 16384]          # 16384 / 131072 / 524288 / 1048576
   [--limit 10] \
   [--resume]
@@ -100,6 +103,7 @@ python skills/alphagenome-api/scripts/run_alphagenome_vcf_batch.py \
 }
 ```
 Omit `--tissues` to get an interactive prompt listing defaults; user can confirm or supply a JSON path.
+Set `--proxy-url ''` to disable automatic proxy retry.
 
 **Output columns:** `vid, chrom, position, ref, alt, variant_type, assembly, interval_start, interval_end` + all INFO keys (sorted) + `{tissue}_mean_diff / {tissue}_log2fc` × 8 tissues + `status, error, run_time_utc`
 

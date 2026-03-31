@@ -75,3 +75,18 @@ cases:
     expected_primary_skill: skill-factory
     expected_secondary_skills: []
     task: skill-scaffold
+  - id: route_016
+    query: "I want to analyze my genomic sequences."
+    expected_decision: clarify
+    expected_clarify_contains: "which task do you want"
+  - id: route_017
+    query: "Run AlphaGenome variant effect prediction."
+    expected_primary_skill: alphagenome-api
+    expected_secondary_skills: []
+    task: variant-effect
+  - id: route_018
+    query: "Use borzoi and gpn to compare variant scoring on hg38 chr12 position 1000000 REF A ALT G."
+    expected_primary_skill: borzoi-workflows
+    expected_secondary_skills:
+      - gpn-models
+    task: variant-effect

@@ -35,3 +35,31 @@ cases:
     min_expected_outputs: 3
     required_step_contains: "python skills/alphagenome-api/scripts/run_alphagenome_predict_variant.py"
     required_expected_output_contains: "output/alphagenome"
+  - id: task_success_007
+    # Known gaps (tracked in DEVELOPMENT_PLAN.md VCF 输入标准化规划):
+    #   1. Agent routes to case-study/run_vcf_effect.py instead of
+    #      skills/alphagenome-api/scripts/run_alphagenome_vcf_batch.py
+    #   2. Agent does not propagate user-specified output dir into expected_outputs
+    # required_step_contains and required_expected_output_contains intentionally
+    # omitted until skill script is promoted as primary VCF path.
+    query: "Use $alphagenome-api to run VCF batch variant effect prediction on case-study/Test.geuvadis.vcf, assembly hg38, output to output/alphagenome/."
+    task: variant-effect
+    min_runnable_steps: 1
+    min_expected_outputs: 2
+  - id: task_success_008
+    query: "Use $nucleotide-transformer-v3 to run track prediction for human hg38 chr19:6700000-6732768, save trackplot to output/ntv3_results/."
+    task: track-prediction
+    min_runnable_steps: 1
+    min_expected_outputs: 2
+    required_step_contains: "run_track_prediction.py"
+    required_expected_output_contains: "output/ntv3_results"
+  - id: task_success_009
+    query: "Use $dnabert2 to compute token-level embeddings for a DNA sequence, save NPZ embedding to output/dnabert2/."
+    task: embedding
+    min_runnable_steps: 1
+    min_expected_outputs: 1
+  - id: task_success_010
+    query: "Use $borzoi-workflows to score variant effect at hg38 chr12 position 1000000 REF A ALT G, output TSV and trackplot."
+    task: variant-effect
+    min_runnable_steps: 1
+    min_expected_outputs: 2
