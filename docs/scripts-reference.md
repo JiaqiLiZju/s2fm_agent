@@ -35,6 +35,8 @@ All 19 scripts in `scripts/`. For step-by-step usage in task context see `playbo
 | `validate_routing.sh` | Run `evals/routing/cases.yaml` against the live router; checks `decision` and `primary_skill` | `--cases`, `--router`, `--include-disabled` |
 | `validate_groundedness.sh` | Run `evals/groundedness/cases.yaml`; checks no forbidden substrings appear in output | `--cases`, `--agent`, `--include-disabled` |
 | `validate_task_success.sh` | Run `evals/task_success/cases.yaml`; checks plan has minimum runnable steps and expected outputs | `--cases`, `--agent`, `--include-disabled` |
+| `benchmark/tools/eval_benchmark.py` | Comparative benchmark aggregator across routing/groundedness/task-success suites, with summary tables and statistics | `--participants`, `--suites`, `--output-dir`, `--seed`, `--dry-run`, `--openai-base-url` |
+| `benchmark/tools/test_eval_benchmark_mock.py` | Fixture/mock regression checks for benchmark parser, scorer, and retry behavior | none |
 
 ### Support Library
 
@@ -84,6 +86,8 @@ All scripts that iterate over skills source `scripts/lib_registry.sh`.
 | `make eval-routing` | `validate_routing.sh` |
 | `make eval-groundedness` | `validate_groundedness.sh` |
 | `make eval-task-success` | `validate_task_success.sh` |
+| `make eval-benchmark` | `benchmark/tools/eval_benchmark.py` |
+| `make test-eval-benchmark-mock` | `benchmark/tools/test_eval_benchmark_mock.py` |
 | `make route-query QUERY=...` | `route_query.sh --query "$QUERY"` |
 | `make run-agent QUERY=...` | `run_agent.sh --query "$QUERY"` |
 | `make execute-plan QUERY=...` | `execute_plan.sh --query "$QUERY"` |

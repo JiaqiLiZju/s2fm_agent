@@ -1,0 +1,34 @@
+{
+  "decision": "route",
+  "primary_skill": "dnabert2",
+  "secondary_skills": [],
+  "clarify_question": null,
+  "constraints": [
+    "transformers"
+  ],
+  "plan": {
+    "task": "embedding",
+    "selected_skill": "dnabert2",
+    "assumptions": [
+      "sequence-length-and-tokenization-must-match-model"
+    ],
+    "required_inputs": [
+      "sequence-or-interval",
+      "embedding-target"
+    ],
+    "missing_inputs": [],
+    "constraints": [
+      "python>=3.10"
+    ],
+    "runnable_steps": [
+      "bash scripts/run_agent.sh --task embedding --query dnabert2-embedding-workflow"
+    ],
+    "expected_outputs": [
+      "plan-json:embedding"
+    ],
+    "fallbacks": [
+      "switch-to-compatible-embedding-skill"
+    ],
+    "retry_policy": "clarify-then-single-retry"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "decision": "route",
+  "primary_skill": "invented-skill",
+  "secondary_skills": ["dnabert2"],
+  "clarify_question": null,
+  "constraints": ["transformers"],
+  "plan": null
+}

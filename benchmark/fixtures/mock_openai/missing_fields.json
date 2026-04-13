@@ -1,0 +1,5 @@
+{
+  "decision": "route",
+  "primary_skill": "dnabert2",
+  "constraints": ["transformers"]
+}

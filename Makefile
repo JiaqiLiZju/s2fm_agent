@@ -25,7 +25,7 @@ ifeq ($(PREFETCH_MODELS),1)
 BOOTSTRAP_FLAGS += --prefetch-models
 endif
 
-.PHONY: help link-skills validate-registry validate-registry-tracking validate-skill-metadata validate-input-contracts validate-migration-paths validate-agent eval-routing eval-groundedness eval-task-success route-query run-agent execute-plan agent-console bootstrap bootstrap-persistent bootstrap-ntv3-hf bootstrap-borzoi bootstrap-evo2-light bootstrap-evo2-full prefetch-models clean-runtime smoke smoke-lite
+.PHONY: help link-skills validate-registry validate-registry-tracking validate-skill-metadata validate-input-contracts validate-migration-paths validate-agent eval-routing eval-groundedness eval-task-success eval-benchmark test-eval-benchmark-mock route-query run-agent execute-plan agent-console bootstrap bootstrap-persistent bootstrap-ntv3-hf bootstrap-borzoi bootstrap-evo2-light bootstrap-evo2-full prefetch-models clean-runtime smoke smoke-lite
 
 help:
 	@printf '%s\n' \
@@ -40,6 +40,8 @@ help:
 	  '  make eval-routing          Evaluate routing behavior using eval cases and registry metadata' \
 	  '  make eval-groundedness     Evaluate groundedness constraints against curated cases' \
 	  '  make eval-task-success     Evaluate task-plan completeness against curated cases' \
+	  '  make eval-benchmark        Run comparative benchmark (s2f-agent + configured baselines)' \
+	  '  make test-eval-benchmark-mock Run fixture-based benchmark unit tests' \
 	  '  make route-query           Route one query (set QUERY=... and optional TASK=...)' \
 	  '  make run-agent             Run full agent orchestration (set QUERY=... and optional TASK=...)' \
 	  '  make execute-plan          Build/execute plan from query (set QUERY=... and optional TASK=...)' \
@@ -101,6 +103,12 @@ eval-groundedness:
 
 eval-task-success:
 	bash $(REPO_ROOT)/scripts/validate_task_success.sh
+
+eval-benchmark:
+	python3 $(REPO_ROOT)/benchmark/tools/eval_benchmark.py
+
+test-eval-benchmark-mock:
+	python3 $(REPO_ROOT)/benchmark/tools/test_eval_benchmark_mock.py
 
 route-query:
 	@if [[ -z "$(QUERY)" ]]; then \

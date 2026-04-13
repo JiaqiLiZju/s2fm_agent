@@ -1,0 +1,51 @@
+schema_version: 1
+updated_at: "2026-04-13"
+benchmark_name: s2f-agent-comparative-benchmark
+defaults:
+  runs_root: benchmark/runs
+  suites:
+    - routing
+    - groundedness
+    - task_success
+  bootstrap_iterations: 2000
+  openai_timeout_seconds: 120
+  openai_max_retries: 1
+  example_limit_per_suite: 2
+  openai_base_url: https://api.openai.com/v1
+  include_disabled_skills: false
+  main_participants:
+    - s2f-agent
+    - gpt-4o
+    - o3-mini
+  ablation_participants:
+    - o3-mini-direct
+    - o3-mini-catalog-only
+case_files:
+  routing: evals/routing/cases.yaml
+  groundedness: evals/groundedness/cases.yaml
+  task_success: evals/task_success/cases.yaml
+output_layout:
+  required_files:
+    - run_metadata.json
+    - summary.json
+    - summary.csv
+    - table.md
+    - stats.json
+    - examples.md
+  directories:
+    raw_outputs: raw_outputs
+    case_records: case_records
+  raw_output_pattern: raw_outputs/{participant_id}/{suite}/{case_id}.txt
+  record_pattern: case_records/{participant_id}/{suite}/{case_id}.json
+family_descriptions:
+  api-variant-prediction: Cloud API-based variant effect prediction (AlphaGenome).
+  sequence-to-signal: Sequence-to-track prediction with Borzoi-style multi-species signal models.
+  transformer-embedding-and-finetuning: DNABERT-2 embeddings, GUE evaluation, and supervised fine-tuning from CSV.
+  genome-language-model-inference: Evo 2 genome language model workflows for local or hosted inference.
+  phylogenetic-language-models: GPN-family phylogenetic models for alignment-aware loading, training, and variant scoring.
+  transformers-ntv3: NTv3 species-conditioned transformer workflows for embedding and track prediction.
+  segmentation-heads: SegmentNT family segmentation workflows with rescaling and interval constraints.
+  legacy-cnn-regulatory: Classic Basset CNN workflows for regulatory prediction and SAD analysis.
+  profile-prediction-and-attribution: BPNet profile prediction with attribution and motif analysis.
+  jax-haiku-transformers: Classic nucleotide-transformer JAX workflows with 6-mer tokenization.
+  skilling-and-scaffolding: Repository tooling for scaffolding and validating new skill packages.

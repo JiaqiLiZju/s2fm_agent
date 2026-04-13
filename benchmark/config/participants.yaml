@@ -1,0 +1,45 @@
+schema_version: 1
+updated_at: "2026-04-13"
+default_participants:
+  - s2f-agent
+  - gpt-4o
+  - o3-mini
+participants:
+  - id: s2f-agent
+    label: s2f-agent
+    kind: local_agent
+    prompt_variant: runtime
+    table_group: main
+  - id: gpt-4o
+    label: gpt-4o
+    kind: openai_chat
+    model: gpt-4o
+    prompt_variant: catalog+contracts
+    table_group: main
+  - id: o3-mini
+    label: o3-mini
+    kind: openai_chat
+    model: o3-mini
+    reasoning_effort: medium
+    prompt_variant: catalog+contracts
+    table_group: main
+    ablation_family: o3-mini
+    ablation_label: catalog+contracts
+  - id: o3-mini-direct
+    label: o3-mini (direct)
+    kind: openai_chat
+    model: o3-mini
+    reasoning_effort: medium
+    prompt_variant: direct
+    table_group: ablation
+    ablation_family: o3-mini
+    ablation_label: direct
+  - id: o3-mini-catalog-only
+    label: o3-mini (catalog-only)
+    kind: openai_chat
+    model: o3-mini
+    reasoning_effort: medium
+    prompt_variant: catalog-only
+    table_group: ablation
+    ablation_family: o3-mini
+    ablation_label: catalog-only

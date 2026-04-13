@@ -399,11 +399,19 @@ make validate-migration-paths
 make eval-routing
 make eval-groundedness
 make eval-task-success
+make eval-benchmark
+make test-eval-benchmark-mock
 make smoke-lite
 make route-query QUERY='Need variant-effect guidance' TASK='variant-effect'
 make run-agent QUERY='Help me run AlphaGenome predict_variant with RNA output'
 make execute-plan QUERY='Need track-prediction plan for human hg38 interval' TASK='track-prediction'
 ```
+
+Comparative benchmark notes:
+
+- `make eval-benchmark` runs `s2f-agent,gpt-4o,o3-mini` by default and requires `OPENAI_API_KEY`.
+- Local-only benchmark smoke check: `python3 benchmark/tools/eval_benchmark.py --participants s2f-agent --dry-run`.
+- Benchmark section root: `benchmark/` (tools/config/prompts/fixtures/runs/reports are centrally managed here).
 
 CI workflow entry:
 

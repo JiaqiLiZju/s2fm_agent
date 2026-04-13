@@ -15,6 +15,97 @@ The project has two distinct quality-check layers:
 | Groundedness | `evals/groundedness/cases.yaml` | No fabricated symbols or forbidden substrings in agent output | `scripts/validate_groundedness.sh` |
 | Task success | `evals/task_success/cases.yaml` | Plan has minimum `runnable_steps` and `expected_outputs` counts | `scripts/validate_task_success.sh` |
 
+## Comparative Benchmark
+
+The benchmark layer adds quantitative, paper-ready aggregation on top of the same curated eval cases.
+It does not replace the three suite validators; it reuses their scoring semantics.
+
+### What it runs
+
+- Case sources: `evals/routing/cases.yaml`, `evals/groundedness/cases.yaml`, `evals/task_success/cases.yaml`
+- Main participants: `s2f-agent`, `gpt-4o`, `o3-mini`
+- Controlled ablation (o3-mini only): `direct`, `catalog-only`, `catalog+contracts`
+
+Benchmark assets are centrally managed under `benchmark/`:
+
+- `benchmark/config/benchmark.yaml`
+- `benchmark/config/participants.yaml`
+- `benchmark/prompts/*.md`
+- `benchmark/fixtures/mock_openai/`
+- `benchmark/runs/`
+- `benchmark/reports/manuscript/`
+
+### Run benchmark
+
+```bash
+python3 benchmark/tools/eval_benchmark.py
+# or
+make eval-benchmark
+```
+
+Local-only dry run (no OpenAI calls):
+
+```bash
+python3 benchmark/tools/eval_benchmark.py --participants s2f-agent --dry-run
+```
+
+If OpenAI participants are enabled and `OPENAI_API_KEY` is not set, the script exits with a clear error.
+
+Run fixture-based mock tests for benchmark parser/scorer/retry logic:
+
+```bash
+make test-eval-benchmark-mock
+```
+
+### Key CLI flags
+
+```bash
+python3 benchmark/tools/eval_benchmark.py \
+  --participants s2f-agent,gpt-4o,o3-mini \
+  --suites routing,groundedness,task_success \
+  --output-dir benchmark/runs/manual_001 \
+  --seed 7 \
+  --openai-base-url https://api.openai.com/v1
+```
+
+- `--participants`: comma-separated participant IDs from `participants.yaml`
+- `--suites`: comma-separated suite IDs
+- `--output-dir`: explicit run directory (otherwise timestamped dir under `benchmark/runs/`)
+- `--seed`: seed for bootstrap/statistics reproducibility
+- `--dry-run`: skip OpenAI calls and mark OpenAI participants as skipped
+- `--openai-base-url`: OpenAI-compatible endpoint override
+
+### Output artifacts
+
+Each run writes a timestamped directory containing:
+
+- `run_metadata.json`
+- `summary.json`
+- `summary.csv`
+- `table.md`
+- `stats.json`
+- `examples.md`
+- `raw_outputs/{participant}/{suite}/{case_id}.txt`
+- `case_records/{participant}/{suite}/{case_id}.json`
+
+### Metric definitions
+
+- Suite micro: pass rate across all scored cases in that suite
+- Suite macro: average pass rate across `task` groups; cases without task use `general`
+- Overall micro: pass rate across all scored cases from all selected suites
+- Overall macro: average of the selected suites' macro metrics
+
+### Statistical reporting
+
+- Micro comparisons use paired exact McNemar tests (`s2f-agent` vs each main baseline), with delta and p-value.
+- Micro deltas include bootstrap 95% confidence intervals.
+- Macro reports include point estimates plus bootstrap 95% confidence intervals.
+
+### Manuscript usage guidance
+
+Use benchmark-generated `table.md` / `summary.csv` as the source of manuscript numbers.
+Do not hand-edit quantitative values in the manuscript text.
+
 ## Routing Eval
 
 **Case file:** `evals/routing/cases.yaml`
