@@ -52,7 +52,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--device",
-        choices=["auto", "cpu", "cuda"],
+        choices=["auto", "cpu", "cuda", "mps"],
         default="auto",
         help="Inference device. Default: auto.",
     )
@@ -73,17 +73,36 @@ def parse_args() -> argparse.Namespace:
         default=8,
         help="Number of fallback bigwig tracks when preferred ids are unavailable.",
     )
+    parser.add_argument(
+        "--save-npz",
+        action="store_true",
+        help="Save raw logits arrays to <prefix>_track_prediction.npz for downstream analysis.",
+    )
     return parser.parse_args()
 
 
 def choose_device(torch_mod, req: str) -> str:
+    has_mps = (
+        hasattr(torch_mod, "backends")
+        and hasattr(torch_mod.backends, "mps")
+        and torch_mod.backends.mps.is_available()
+    )
     if req == "cpu":
         return "cpu"
     if req == "cuda":
         if not torch_mod.cuda.is_available():
             raise SystemExit("--device=cuda requested but CUDA is not available")
         return "cuda"
-    return "cuda" if torch_mod.cuda.is_available() else "cpu"
+    if req == "mps":
+        if not has_mps:
+            raise SystemExit("--device=mps requested but MPS is not available")
+        return "mps"
+
+    if torch_mod.cuda.is_available():
+        return "cuda"
+    if has_mps:
+        return "mps"
+    return "cpu"
 
 
 def choose_dtype(torch_mod, req: str, device: str):
@@ -97,6 +116,8 @@ def choose_dtype(torch_mod, req: str, device: str):
     if device == "cuda":
         major, _ = torch_mod.cuda.get_device_capability(0)
         return torch_mod.bfloat16 if major >= 8 else torch_mod.float16
+    if device == "mps":
+        return torch_mod.float32
     return torch_mod.float32
 
 
@@ -163,6 +184,13 @@ def main() -> int:
     from transformers import AutoConfig, AutoModel, AutoTokenizer
 
     device = choose_device(torch, args.device)
+    requested_device = device
+    if device == "mps":
+        # Upstream NTv3 remote code currently calls torch.autocast(device_type=...),
+        # and torch 2.2 on MPS can raise "unsupported autocast device_type 'mps'".
+        # Keep CLI compatibility while ensuring execution remains stable.
+        print("[1/6] requested device=mps; falling back to cpu for NTv3 runtime compatibility", flush=True)
+        device = "cpu"
     dtype = choose_dtype(torch, args.dtype, device)
 
     print(f"[1/6] device={device}, dtype={dtype}", flush=True)
@@ -328,10 +356,27 @@ def main() -> int:
 
     plot_path = out_dir / f"{prefix}_trackplot.png"
     meta_path = out_dir / f"{prefix}_result.json"
+    npz_path = out_dir / f"{prefix}_track_prediction.npz"
 
     plt.tight_layout()
     plt.savefig(plot_path, dpi=180)
     plt.close(fig)
+
+    if args.save_npz:
+        np.savez_compressed(
+            npz_path,
+            logits=logits,
+            bigwig_tracks_logits=bigwig,
+            bed_tracks_logits=bed_logits,
+            bigwig_track_ids=np.array(bigwig_names, dtype=object),
+            bed_element_names=np.array(bed_element_names, dtype=object),
+            chrom=np.array([chrom], dtype=object),
+            start=np.array([start], dtype=np.int64),
+            end=np.array([end], dtype=np.int64),
+            prediction_start=np.array([prediction_start], dtype=np.int64),
+            prediction_end=np.array([prediction_end], dtype=np.int64),
+            coordinate_convention=np.array(["[start, end) zero-based"], dtype=object),
+        )
 
     meta = {
         "skill_id": "nucleotide-transformer-v3",
@@ -356,6 +401,7 @@ def main() -> int:
             "chrom": chrom,
             "start": start,
             "end": end,
+            "requested_device": requested_device,
         },
         "sequence_length_original": orig_len,
         "sequence_length_used": seq_len,
@@ -373,7 +419,7 @@ def main() -> int:
         "plot_path": str(plot_path),
         "outputs": {
             "plot": str(plot_path),
-            "npz": None,
+            "npz": str(npz_path) if args.save_npz else None,
             "result_json": str(meta_path),
         },
     }
@@ -382,6 +428,8 @@ def main() -> int:
         json.dump(meta, f, indent=2)
 
     print(f"[6/6] saved plot: {plot_path}", flush=True)
+    if args.save_npz:
+        print(f"[6/6] saved npz: {npz_path}", flush=True)
     print(f"[6/6] saved meta: {meta_path}", flush=True)
     return 0
 

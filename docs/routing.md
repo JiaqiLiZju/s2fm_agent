@@ -84,6 +84,13 @@ Track-prediction planner behavior (run_agent fastpath):
 - Default output root is inferred as `case-study-playbooks/track_prediction/<run_id>/` when output directories are not explicitly provided.
 - BED resolution priority is: absolute path -> repo-relative path -> `case-study-playbooks/track_prediction/bed/` fallback, with explicit validation error text when unresolved.
 
+Variant-effect planner behavior (run_agent fastpath):
+
+- Default behavior remains single primary skill execution.
+- A composite multi-skill variant-effect plan is generated only on explicit comparison intent (`compare`, `comparison`, `benchmark`, `all-skills`, `multi-skill`, `对比`, `比较`, `多技能`, `多模型`, `全量`) and >=2 explicitly mentioned variant skills.
+- Mentioning multiple variant-effect skills without explicit comparison keywords keeps single-primary-skill execution.
+- Composite execution uses a unified run root (`case-study-playbooks/variant-effect/<run_id>`) and emits wide unified records plus per-skill standardized records.
+
 Fine-tuning disambiguation:
 
 - Prefer `dnabert2` for generic CSV/classification fine-tuning requests.

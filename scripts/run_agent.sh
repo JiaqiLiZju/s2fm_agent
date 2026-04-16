@@ -398,6 +398,263 @@ extract_track_explicit_skills_from_query() {
   printf '%s\n' "$out"
 }
 
+extract_variant_explicit_skills_from_query() {
+  local query_lc="$1"
+  local out=""
+  if contains_token "$query_lc" "alphagenome"; then
+    out="$(append_csv "$out" "alphagenome-api")"
+  fi
+  if contains_token "$query_lc" "borzoi"; then
+    out="$(append_csv "$out" "borzoi-workflows")"
+  fi
+  if contains_token "$query_lc" "evo2"; then
+    out="$(append_csv "$out" "evo2-inference")"
+  fi
+  if contains_token "$query_lc" "gpn"; then
+    out="$(append_csv "$out" "gpn-models")"
+  fi
+  printf '%s\n' "$out"
+}
+
+variant_query_has_compare_intent() {
+  local query_lc="$1"
+  contains_token "$query_lc" "compare" || \
+    contains_token "$query_lc" "comparison" || \
+    contains_token "$query_lc" "benchmark" || \
+    contains_token "$query_lc" "all-skills" || \
+    contains_token "$query_lc" "multi-skill" || \
+    contains_token "$query_lc" "对比" || \
+    contains_token "$query_lc" "比较" || \
+    contains_token "$query_lc" "多技能" || \
+    contains_token "$query_lc" "多模型" || \
+    contains_token "$query_lc" "全量"
+}
+
+extract_variant_run_id_from_query() {
+  local query_raw="$1"
+  local run_id=""
+  run_id="$(printf '%s\n' "$query_raw" | grep -Eo '[0-9]{8}T[0-9]{6}Z' | head -n 1 || true)"
+  printf '%s\n' "$run_id"
+}
+
+compute_variant_run_id() {
+  local query_raw="$1"
+  local run_id=""
+  run_id="$(extract_variant_run_id_from_query "$query_raw")"
+  if [[ -z "$run_id" ]]; then
+    run_id="$(date -u +%Y%m%dT%H%M%SZ)"
+  fi
+  printf '%s\n' "$run_id"
+}
+
+extract_variant_output_root_from_query() {
+  local query_raw="$1"
+  local root=""
+  root="$(printf '%s\n' "$query_raw" | grep -Eio 'case-study-playbooks/variant-effect/[0-9]{8}T[0-9]{6}Z' | head -n 1 || true)"
+  root="$(printf '%s\n' "$root" | sed -E "s/^[\"'()]+//; s/[\"'(),;:。；，]+$//")"
+  printf '%s\n' "$root"
+}
+
+compute_variant_output_root() {
+  local query_raw="$1"
+  local run_id="$2"
+  local out=""
+  out="$(extract_variant_output_root_from_query "$query_raw")"
+  if [[ -z "$out" ]]; then
+    out="case-study-playbooks/variant-effect/${run_id}"
+  fi
+  out="${out%/.}"
+  out="${out%/}"
+  printf '%s\n' "$out"
+}
+
+variant_skill_to_case_token() {
+  local skill="$1"
+  case "$skill" in
+    alphagenome-api) printf 'alphagenome\n' ;;
+    borzoi-workflows) printf 'borzoi\n' ;;
+    evo2-inference) printf 'evo2\n' ;;
+    gpn-models) printf 'gpn\n' ;;
+    *)
+      printf '\n'
+      ;;
+  esac
+}
+
+variant_skill_output_subdir() {
+  local skill="$1"
+  case "$skill" in
+    alphagenome-api) printf 'alphagenome_results\n' ;;
+    borzoi-workflows) printf 'borzoi_results\n' ;;
+    evo2-inference) printf 'evo2_results\n' ;;
+    gpn-models) printf 'gpn_results\n' ;;
+    *)
+      printf '\n'
+      ;;
+  esac
+}
+
+extract_variant_vcf_path_from_query() {
+  local query_raw="$1"
+  local vcf_path=""
+  vcf_path="$(printf '%s\n' "$query_raw" | grep -Eo '[/A-Za-z0-9._~-]+\.vcf' | head -n 1 || true)"
+  if [[ -z "$vcf_path" ]]; then
+    printf '\n'
+    return 0
+  fi
+  vcf_path="$(printf '%s\n' "$vcf_path" | sed -E "s/^[\"'()]+//; s/[\"'(),;:。；，]+$//")"
+  printf '%s\n' "$vcf_path"
+}
+
+resolve_variant_vcf_path() {
+  local vcf_path="${1:-}"
+  local resolved=""
+  local source=""
+  local error_msg=""
+  local repo_candidate=""
+  local fallback_candidate=""
+  local fallback_base_candidate=""
+
+  if [[ -z "$vcf_path" ]]; then
+    printf '||\n'
+    return 0
+  fi
+
+  if [[ "$vcf_path" == /* ]]; then
+    if [[ -f "$vcf_path" ]]; then
+      resolved="$vcf_path"
+      source="absolute-path"
+    else
+      error_msg="vcf-path-not-found:absolute:${vcf_path}"
+    fi
+  else
+    repo_candidate="$REPO_ROOT/$vcf_path"
+    fallback_candidate="$REPO_ROOT/case-study-playbooks/variant-effect/vcf/$vcf_path"
+    fallback_base_candidate="$REPO_ROOT/case-study-playbooks/variant-effect/vcf/$(basename "$vcf_path")"
+    if [[ -f "$repo_candidate" ]]; then
+      resolved="$repo_candidate"
+      source="repo-root-relative"
+    elif [[ -f "$fallback_candidate" ]]; then
+      resolved="$fallback_candidate"
+      source="variant-vcf-fallback"
+    elif [[ -f "$fallback_base_candidate" ]]; then
+      resolved="$fallback_base_candidate"
+      source="variant-vcf-fallback-basename"
+    else
+      error_msg="vcf-path-not-found:raw=${vcf_path};checked=${repo_candidate}|${fallback_candidate}|${fallback_base_candidate}"
+    fi
+  fi
+
+  if [[ -n "$resolved" ]]; then
+    resolved="$(resolve_abs_path_text "$resolved")"
+  fi
+
+  printf '%s|%s|%s\n' "$resolved" "$source" "$error_msg"
+}
+
+extract_variant_coordinate_from_query() {
+  local query_lc="$1"
+  local token=""
+  local chrom=""
+  local position_raw=""
+  local position=""
+  local rest=""
+
+  token="$(printf '%s\n' "$query_lc" | grep -Eio 'chr[[:alnum:]_]+:[0-9_,]+' | head -n 1 || true)"
+  if [[ -n "$token" ]]; then
+    chrom="${token%%:*}"
+    rest="${token#*:}"
+    position="$(normalize_numeric_token "$rest")"
+  fi
+
+  if [[ -z "$chrom" ]]; then
+    chrom="$(printf '%s\n' "$query_lc" | grep -Eio 'chrom[[:space:]]*=[[:space:]]*"?chr[[:alnum:]_]+' | head -n 1 | sed -E 's/.*(chr[[:alnum:]_]+).*/\1/' || true)"
+  fi
+  if [[ -z "$chrom" ]]; then
+    chrom="$(printf '%s\n' "$query_lc" | grep -Eio 'chr[[:alnum:]_]+' | head -n 1 || true)"
+  fi
+
+  if [[ -z "$position" ]]; then
+    position_raw="$(printf '%s\n' "$query_lc" | grep -Eio 'position[[:space:]]*[:=]?[[:space:]]*[0-9_,]+' | head -n 1 | grep -Eo '[0-9][0-9_,]*' | head -n 1 || true)"
+    position="$(normalize_numeric_token "$position_raw")"
+  fi
+  if [[ -z "$position" ]]; then
+    position_raw="$(printf '%s\n' "$query_lc" | grep -Eio '[0-9][0-9_,]*[[:space:]]*位点' | head -n 1 | sed -E 's/[^0-9_,]*([0-9][0-9_,]*).*/\1/' || true)"
+    position="$(normalize_numeric_token "$position_raw")"
+  fi
+
+  if [[ -n "$chrom" && -n "$position" ]]; then
+    printf '%s,%s\n' "$chrom" "$position"
+    return 0
+  fi
+  printf '\n'
+}
+
+extract_variant_assembly_from_query() {
+  local query_lc="$1"
+  extract_ntv3_assembly_from_query "$query_lc"
+}
+
+extract_borzoi_variant_output_dir_from_query() {
+  local query_raw="$1"
+  local out=""
+  out="$(printf '%s\n' "$query_raw" | grep -Eio 'case-study-playbooks/variant-effect/[0-9]{8}T[0-9]{6}Z/borzoi_results' | head -n 1 || true)"
+  if [[ -z "$out" ]]; then
+    out="$(printf '%s\n' "$query_raw" | grep -Eio 'case-study-playbooks/[A-Za-z0-9._/-]*borzoi_results[A-Za-z0-9._/-]*' | head -n 1 || true)"
+  fi
+  if [[ -z "$out" ]]; then
+    out="$(printf '%s\n' "$query_raw" | grep -Eio 'output/[A-Za-z0-9._/-]*borzoi[A-Za-z0-9._/-]*' | head -n 1 || true)"
+  fi
+  if [[ -z "$out" ]]; then
+    out="output/borzoi"
+  fi
+  out="$(printf '%s\n' "$out" | sed -E "s/^[\"'()]+//; s/[\"'(),;:.。；，]+$//")"
+  out="${out%/.}"
+  out="${out%.}"
+  out="${out%/}"
+  printf '%s\n' "$out"
+}
+
+extract_gpn_variant_output_dir_from_query() {
+  local query_raw="$1"
+  local out=""
+  out="$(printf '%s\n' "$query_raw" | grep -Eio 'case-study-playbooks/variant-effect/[0-9]{8}T[0-9]{6}Z/gpn_results' | head -n 1 || true)"
+  if [[ -z "$out" ]]; then
+    out="$(printf '%s\n' "$query_raw" | grep -Eio 'case-study-playbooks/[A-Za-z0-9._/-]*gpn_results[A-Za-z0-9._/-]*' | head -n 1 || true)"
+  fi
+  if [[ -z "$out" ]]; then
+    out="$(printf '%s\n' "$query_raw" | grep -Eio 'output/[A-Za-z0-9._/-]*gpn[A-Za-z0-9._/-]*' | head -n 1 || true)"
+  fi
+  if [[ -z "$out" ]]; then
+    out="output/gpn-models"
+  fi
+  out="$(printf '%s\n' "$out" | sed -E "s/^[\"'()]+//; s/[\"'(),;:.。；，]+$//")"
+  out="${out%/.}"
+  out="${out%.}"
+  out="${out%/}"
+  printf '%s\n' "$out"
+}
+
+extract_evo2_variant_output_dir_from_query() {
+  local query_raw="$1"
+  local out=""
+  out="$(printf '%s\n' "$query_raw" | grep -Eio 'case-study-playbooks/variant-effect/[0-9]{8}T[0-9]{6}Z/evo2_results' | head -n 1 || true)"
+  if [[ -z "$out" ]]; then
+    out="$(printf '%s\n' "$query_raw" | grep -Eio 'case-study-playbooks/[A-Za-z0-9._/-]*evo2_results[A-Za-z0-9._/-]*' | head -n 1 || true)"
+  fi
+  if [[ -z "$out" ]]; then
+    out="$(printf '%s\n' "$query_raw" | grep -Eio 'output/[A-Za-z0-9._/-]*evo2[A-Za-z0-9._/-]*' | head -n 1 || true)"
+  fi
+  if [[ -z "$out" ]]; then
+    out="output/evo2"
+  fi
+  out="$(printf '%s\n' "$out" | sed -E "s/^[\"'()]+//; s/[\"'(),;:.。；，]+$//")"
+  out="${out%/.}"
+  out="${out%.}"
+  out="${out%/}"
+  printf '%s\n' "$out"
+}
+
 extract_ntv3_species_from_query() {
   local query_lc="$1"
   if contains_token "$query_lc" "human"; then
@@ -873,6 +1130,9 @@ extract_alphagenome_output_dir_from_query() {
   if [[ -z "$out" ]]; then
     out="output/alphagenome"
   fi
+  out="$(printf '%s\n' "$out" | sed -E "s/[\"'(),;:.。；，]+$//")"
+  out="${out%/.}"
+  out="${out%.}"
   out="${out%/}"
   if [[ -z "$out" ]]; then
     out="output/alphagenome"
@@ -1419,6 +1679,34 @@ if [[ "$effective_task" == "track-prediction" ]]; then
   fi
 fi
 
+variant_run_id=""
+variant_output_root=""
+variant_explicit_skills_csv=""
+variant_explicit_skill_count=0
+variant_compare_intent=0
+variant_vcf_query_path=""
+variant_vcf_resolved=""
+variant_vcf_source=""
+variant_vcf_error=""
+variant_assembly=""
+variant_case_skills_csv=""
+variant_multi_plan_enabled=0
+
+if [[ "$effective_task" == "variant-effect" ]]; then
+  variant_run_id="$(compute_variant_run_id "$query")"
+  variant_output_root="$(compute_variant_output_root "$query" "$variant_run_id")"
+  variant_explicit_skills_csv="$(extract_variant_explicit_skills_from_query "$query_lc")"
+  variant_explicit_skill_count="$(csv_count "$variant_explicit_skills_csv")"
+  if variant_query_has_compare_intent "$query_lc"; then
+    variant_compare_intent=1
+  fi
+  variant_vcf_query_path="$(extract_variant_vcf_path_from_query "$query")"
+  if [[ -n "$variant_vcf_query_path" ]]; then
+    IFS='|' read -r variant_vcf_resolved variant_vcf_source variant_vcf_error < <(resolve_variant_vcf_path "$variant_vcf_query_path")
+  fi
+  variant_assembly="$(extract_variant_assembly_from_query "$query_lc")"
+fi
+
 provided_csv=""
 missing_csv=""
 provided_canonical_csv=""
@@ -1443,6 +1731,52 @@ if [[ "$effective_task" == "track-prediction" && "$primary_skill" == "nucleotide
     missing_csv="$(remove_csv_item "$missing_csv" "output-head")"
     provided_csv="$(append_csv "$provided_csv" "output-head")"
     plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "output-head-inferred-from-track-intent")"
+  fi
+fi
+
+if [[ "$effective_task" == "variant-effect" ]]; then
+  if [[ -n "$variant_assembly" ]]; then
+    if in_csv_list "assembly" "$missing_csv"; then
+      missing_csv="$(remove_csv_item "$missing_csv" "assembly")"
+      provided_csv="$(append_csv "$provided_csv" "assembly")"
+    fi
+    if in_csv_list "assembly" "$missing_canonical_csv"; then
+      missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "assembly")"
+      provided_canonical_csv="$(append_csv "$provided_canonical_csv" "assembly")"
+    fi
+  fi
+
+  if [[ -n "$variant_vcf_query_path" ]]; then
+    if [[ -n "$variant_vcf_resolved" ]]; then
+      provided_csv="$(append_csv "$provided_csv" "vcf-input")"
+      provided_canonical_csv="$(append_csv "$provided_canonical_csv" "vcf-input")"
+      if in_csv_list "coordinate-or-interval" "$missing_csv"; then
+        missing_csv="$(remove_csv_item "$missing_csv" "coordinate-or-interval")"
+        provided_csv="$(append_csv "$provided_csv" "coordinate-or-interval")"
+      fi
+      if in_csv_list "ref-alt-or-variant-spec" "$missing_csv"; then
+        missing_csv="$(remove_csv_item "$missing_csv" "ref-alt-or-variant-spec")"
+        provided_csv="$(append_csv "$provided_csv" "ref-alt-or-variant-spec")"
+      fi
+      if in_csv_list "coordinate-or-interval" "$missing_canonical_csv"; then
+        missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "coordinate-or-interval")"
+        provided_canonical_csv="$(append_csv "$provided_canonical_csv" "coordinate-or-interval")"
+      fi
+      if in_csv_list "ref-alt-or-variant-spec" "$missing_canonical_csv"; then
+        missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "ref-alt-or-variant-spec")"
+        provided_canonical_csv="$(append_csv "$provided_canonical_csv" "ref-alt-or-variant-spec")"
+      fi
+      plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "vcf-input-path-resolution:${variant_vcf_source}")"
+      plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "vcf-input-resolved:${variant_vcf_resolved}")"
+    else
+      if ! in_csv_list "vcf-input" "$missing_csv"; then
+        missing_csv="$(append_csv "$missing_csv" "vcf-input")"
+      fi
+      if ! in_csv_list "vcf-input" "$missing_canonical_csv"; then
+        missing_canonical_csv="$(append_csv "$missing_canonical_csv" "vcf-input")"
+      fi
+      plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "$variant_vcf_error")"
+    fi
   fi
 fi
 
@@ -2003,7 +2337,316 @@ if [[ "$effective_task" == "track-prediction" && "$track_explicit_skill_count" -
   fi
 fi
 
-if [[ "$effective_task" == "variant-effect" && "$primary_skill" == "alphagenome-api" ]]; then
+if [[ "$effective_task" == "variant-effect" && "$variant_compare_intent" -eq 1 && "$variant_explicit_skill_count" -ge 2 ]]; then
+  variant_ordered_skills=(alphagenome-api borzoi-workflows evo2-inference gpn-models)
+  variant_case_skills_csv=""
+  variant_expected_skills_csv=""
+  variant_skill=""
+
+  for variant_skill in "${variant_ordered_skills[@]}"; do
+    if in_csv_list "$variant_skill" "$variant_explicit_skills_csv"; then
+      variant_expected_skills_csv="$(append_csv "$variant_expected_skills_csv" "$variant_skill")"
+      variant_case_token="$(variant_skill_to_case_token "$variant_skill")"
+      if [[ -n "$variant_case_token" ]]; then
+        variant_case_skills_csv="$(append_csv "$variant_case_skills_csv" "$variant_case_token")"
+      fi
+    fi
+  done
+
+  if [[ -z "$variant_case_skills_csv" ]]; then
+    variant_case_skills_csv="alphagenome,borzoi,evo2,gpn"
+    variant_expected_skills_csv="alphagenome-api,borzoi-workflows,evo2-inference,gpn-models"
+  fi
+  variant_case_skills_arg="$(printf '%s\n' "$variant_case_skills_csv" | tr ',' '+')"
+
+  if [[ -z "$variant_assembly" ]]; then
+    variant_assembly="hg38"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "default-assembly:hg38")"
+    if in_csv_list "assembly" "$missing_csv"; then
+      missing_csv="$(remove_csv_item "$missing_csv" "assembly")"
+      provided_csv="$(append_csv "$provided_csv" "assembly")"
+    fi
+    if in_csv_list "assembly" "$missing_canonical_csv"; then
+      missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "assembly")"
+      provided_canonical_csv="$(append_csv "$provided_canonical_csv" "assembly")"
+    fi
+  fi
+
+  if [[ -z "$variant_vcf_resolved" ]]; then
+    if ! in_csv_list "vcf-input" "$missing_csv"; then
+      missing_csv="$(append_csv "$missing_csv" "vcf-input")"
+    fi
+    if ! in_csv_list "vcf-input" "$missing_canonical_csv"; then
+      missing_canonical_csv="$(append_csv "$missing_canonical_csv" "vcf-input")"
+    fi
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "variant-multi-skill-needs-valid-vcf-input-path")"
+  elif [[ -z "$missing_csv" ]]; then
+    plan_steps_csv="bash case-study-playbooks/variant-effect/run_variant_effect_case.sh --vcf ${variant_vcf_resolved} --run-id ${variant_run_id} --skills ${variant_case_skills_arg} --assembly ${variant_assembly} --continue-on-error 1"
+    plan_expected_outputs_csv=""
+    plan_fallbacks_csv=""
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/variant_effect_case_summary.json")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/logs/variant_effect_case_manifest.tsv")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/logs/unified_variant_effect_records.tsv")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/logs/unified_variant_effect_records.json")"
+
+    for variant_skill in $(printf '%s\n' "$variant_expected_skills_csv" | tr ',' ' '); do
+      [[ -z "$variant_skill" ]] && continue
+      variant_subdir="$(variant_skill_output_subdir "$variant_skill")"
+      variant_case_token="$(variant_skill_to_case_token "$variant_skill")"
+      if [[ -z "$variant_subdir" || -z "$variant_case_token" ]]; then
+        continue
+      fi
+      plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/${variant_subdir}/${variant_case_token}_variant_effect_records.tsv")"
+      plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/${variant_subdir}/${variant_case_token}_variant_effect_records.json")"
+      plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/${variant_subdir}/${variant_case_token}_variant_effect_schema.md")"
+    done
+
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "variant-multi-skill-composite-plan-enabled")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "variant-multi-skill-triggered-by-explicit-compare-intent")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "selected-variant-skills:${variant_case_skills_arg}")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "variant-run-id:${variant_run_id}")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "variant-output-root:${variant_output_root}")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "unified-wide-output-plus-per-skill-standardized-records")"
+    if in_csv_list "evo2" "$variant_case_skills_csv"; then
+      plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "evo2-adaptive-window-fallback-enabled")"
+      plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "evo2-summary-includes-window-len-and-downgrade-history")"
+    fi
+    variant_multi_plan_enabled=1
+  fi
+fi
+
+if [[ "$effective_task" == "variant-effect" && "$variant_multi_plan_enabled" -eq 0 && "$primary_skill" == "borzoi-workflows" ]]; then
+  bz_assembly="$variant_assembly"
+  bz_output_dir="$(extract_borzoi_variant_output_dir_from_query "$query")"
+  bz_variant_csv="$(extract_alphagenome_variant_from_query "$query")"
+  bz_coord_csv="$(extract_variant_coordinate_from_query "$query_lc")"
+  bz_chrom=""
+  bz_position=""
+  bz_alt=""
+  bz_alt_arg=""
+  bz_log_path=""
+  bz_prefix=""
+  bz_step_cmd=""
+
+  if [[ -z "$bz_assembly" ]]; then
+    bz_assembly="hg38"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "default-assembly:hg38")"
+  fi
+  if in_csv_list "assembly" "$missing_csv"; then
+    missing_csv="$(remove_csv_item "$missing_csv" "assembly")"
+    provided_csv="$(append_csv "$provided_csv" "assembly")"
+  fi
+  if in_csv_list "assembly" "$missing_canonical_csv"; then
+    missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "assembly")"
+    provided_canonical_csv="$(append_csv "$provided_canonical_csv" "assembly")"
+  fi
+
+  if [[ -n "$bz_variant_csv" ]]; then
+    IFS=',' read -r bz_chrom bz_position bz_alt <<<"$bz_variant_csv"
+  elif [[ -n "$bz_coord_csv" ]]; then
+    IFS=',' read -r bz_chrom bz_position <<<"$bz_coord_csv"
+  fi
+
+  if [[ -n "$variant_vcf_resolved" && -z "$missing_csv" ]]; then
+    plan_steps_csv="bash case-study-playbooks/variant-effect/run_variant_effect_case.sh --vcf ${variant_vcf_resolved} --run-id ${variant_run_id} --skills borzoi --assembly ${bz_assembly} --continue-on-error 1"
+    plan_expected_outputs_csv=""
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/variant_effect_case_summary.json")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/logs/variant_effect_case_manifest.tsv")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/logs/unified_variant_effect_records.tsv")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/borzoi_results/borzoi_variant_effect_records.tsv")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/borzoi_results/borzoi_variant_effect_records.json")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "borzoi-single-skill-vcf-batch-fastpath-enabled")"
+  elif [[ -n "$bz_chrom" && -n "$bz_position" ]]; then
+    if in_csv_list "coordinate-or-interval" "$missing_csv"; then
+      missing_csv="$(remove_csv_item "$missing_csv" "coordinate-or-interval")"
+      provided_csv="$(append_csv "$provided_csv" "coordinate-or-interval")"
+    fi
+    if in_csv_list "coordinate-or-interval" "$missing_canonical_csv"; then
+      missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "coordinate-or-interval")"
+      provided_canonical_csv="$(append_csv "$provided_canonical_csv" "coordinate-or-interval")"
+    fi
+    if in_csv_list "ref-alt-or-variant-spec" "$missing_csv"; then
+      missing_csv="$(remove_csv_item "$missing_csv" "ref-alt-or-variant-spec")"
+      provided_csv="$(append_csv "$provided_csv" "ref-alt-or-variant-spec")"
+    fi
+    if in_csv_list "ref-alt-or-variant-spec" "$missing_canonical_csv"; then
+      missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "ref-alt-or-variant-spec")"
+      provided_canonical_csv="$(append_csv "$provided_canonical_csv" "ref-alt-or-variant-spec")"
+    fi
+
+    if [[ -n "$bz_alt" ]]; then
+      bz_alt_arg=" --alt ${bz_alt}"
+    else
+      plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "borzoi-alt-default-rule:to-G-unless-ref-G-then-T")"
+    fi
+
+    bz_prefix="borzoi_variant-effect_${bz_chrom}_${bz_position}"
+    bz_log_path="${bz_output_dir}/borzoi_variant_effect.log"
+    bz_step_cmd="set -a; source .env; set +a; mkdir -p ${bz_output_dir}; conda run -n borzoi_py310 python skills/borzoi-workflows/scripts/run_borzoi_predict.py --chrom ${bz_chrom} --position ${bz_position}${bz_alt_arg} --assembly ${bz_assembly} --model-dir \${BORZOI_MODEL_DIR:-case-study/borzoi_fast} --output-dir ${bz_output_dir} --output-prefix ${bz_prefix} 2>&1 | tee ${bz_log_path}"
+
+    plan_steps_csv="$bz_step_cmd"
+    plan_expected_outputs_csv=""
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${bz_output_dir}/${bz_prefix}_result.json")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-plot:${bz_output_dir}/${bz_prefix}_trackplot.png")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${bz_output_dir}/${bz_prefix}_variant.tsv")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${bz_output_dir}/${bz_prefix}_tracks.npz")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${bz_log_path}")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "borzoi-single-site-fastpath-enabled")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "borzoi-model-dir-env-fallback:BORZOI_MODEL_DIR")"
+  fi
+fi
+
+if [[ "$effective_task" == "variant-effect" && "$variant_multi_plan_enabled" -eq 0 && "$primary_skill" == "gpn-models" ]]; then
+  gpn_assembly="$variant_assembly"
+  gpn_output_dir="$(extract_gpn_variant_output_dir_from_query "$query")"
+  gpn_variant_csv="$(extract_alphagenome_variant_from_query "$query")"
+  gpn_coord_csv="$(extract_variant_coordinate_from_query "$query_lc")"
+  gpn_chrom=""
+  gpn_position=""
+  gpn_alt=""
+  gpn_alt_arg=""
+  gpn_log_path=""
+  gpn_result_json=""
+
+  if [[ -z "$gpn_assembly" ]]; then
+    gpn_assembly="hg38"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "default-assembly:hg38")"
+  fi
+  if in_csv_list "assembly" "$missing_csv"; then
+    missing_csv="$(remove_csv_item "$missing_csv" "assembly")"
+    provided_csv="$(append_csv "$provided_csv" "assembly")"
+  fi
+  if in_csv_list "assembly" "$missing_canonical_csv"; then
+    missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "assembly")"
+    provided_canonical_csv="$(append_csv "$provided_canonical_csv" "assembly")"
+  fi
+
+  if [[ -n "$gpn_variant_csv" ]]; then
+    IFS=',' read -r gpn_chrom gpn_position gpn_alt <<<"$gpn_variant_csv"
+  elif [[ -n "$gpn_coord_csv" ]]; then
+    IFS=',' read -r gpn_chrom gpn_position <<<"$gpn_coord_csv"
+  fi
+
+  if [[ -n "$variant_vcf_resolved" && -z "$missing_csv" ]]; then
+    plan_steps_csv="bash case-study-playbooks/variant-effect/run_variant_effect_case.sh --vcf ${variant_vcf_resolved} --run-id ${variant_run_id} --skills gpn --assembly ${gpn_assembly} --continue-on-error 1"
+    plan_expected_outputs_csv=""
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/variant_effect_case_summary.json")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/logs/variant_effect_case_manifest.tsv")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/logs/unified_variant_effect_records.tsv")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/gpn_results/gpn_variant_effect_records.tsv")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/gpn_results/gpn_variant_effect_records.json")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "gpn-single-skill-vcf-batch-fastpath-enabled")"
+  elif [[ -n "$gpn_chrom" && -n "$gpn_position" ]]; then
+    if in_csv_list "coordinate-or-interval" "$missing_csv"; then
+      missing_csv="$(remove_csv_item "$missing_csv" "coordinate-or-interval")"
+      provided_csv="$(append_csv "$provided_csv" "coordinate-or-interval")"
+    fi
+    if in_csv_list "coordinate-or-interval" "$missing_canonical_csv"; then
+      missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "coordinate-or-interval")"
+      provided_canonical_csv="$(append_csv "$provided_canonical_csv" "coordinate-or-interval")"
+    fi
+    if in_csv_list "ref-alt-or-variant-spec" "$missing_csv"; then
+      missing_csv="$(remove_csv_item "$missing_csv" "ref-alt-or-variant-spec")"
+      provided_csv="$(append_csv "$provided_csv" "ref-alt-or-variant-spec")"
+    fi
+    if in_csv_list "ref-alt-or-variant-spec" "$missing_canonical_csv"; then
+      missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "ref-alt-or-variant-spec")"
+      provided_canonical_csv="$(append_csv "$provided_canonical_csv" "ref-alt-or-variant-spec")"
+    fi
+
+    if [[ -n "$gpn_alt" ]]; then
+      gpn_alt_arg=" --alt ${gpn_alt}"
+    else
+      plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "gpn-alt-default-rule:to-G-unless-ref-G-then-T")"
+    fi
+
+    gpn_log_path="${gpn_output_dir}/gpn_variant_effect.log"
+    gpn_result_json="${gpn_output_dir}/gpn_variant-effect_${gpn_chrom}_${gpn_position}_result.json"
+    plan_steps_csv="set -a; source .env; set +a; mkdir -p ${gpn_output_dir}; conda run -n gpn-py310 python skills/gpn-models/references/predict_variant_single_site.py --genome ${gpn_assembly} --chrom ${gpn_chrom} --pos ${gpn_position}${gpn_alt_arg} --output-json ${gpn_result_json} 2>&1 | tee ${gpn_log_path}"
+    plan_expected_outputs_csv=""
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${gpn_result_json}")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${gpn_log_path}")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "gpn-single-site-fastpath-enabled")"
+  fi
+fi
+
+if [[ "$effective_task" == "variant-effect" && "$variant_multi_plan_enabled" -eq 0 && "$primary_skill" == "evo2-inference" ]]; then
+  evo2_assembly="$variant_assembly"
+  evo2_output_dir="$(extract_evo2_variant_output_dir_from_query "$query")"
+  evo2_variant_csv="$(extract_alphagenome_variant_from_query "$query")"
+  evo2_coord_csv="$(extract_variant_coordinate_from_query "$query_lc")"
+  evo2_chrom=""
+  evo2_position=""
+  evo2_variant_coordinate=""
+  evo2_log_path=""
+
+  if [[ -z "$evo2_assembly" ]]; then
+    evo2_assembly="hg38"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "default-assembly:hg38")"
+  fi
+  if in_csv_list "assembly" "$missing_csv"; then
+    missing_csv="$(remove_csv_item "$missing_csv" "assembly")"
+    provided_csv="$(append_csv "$provided_csv" "assembly")"
+  fi
+  if in_csv_list "assembly" "$missing_canonical_csv"; then
+    missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "assembly")"
+    provided_canonical_csv="$(append_csv "$provided_canonical_csv" "assembly")"
+  fi
+
+  if [[ -n "$evo2_variant_csv" ]]; then
+    IFS=',' read -r evo2_chrom evo2_position _evo2_alt <<<"$evo2_variant_csv"
+  elif [[ -n "$evo2_coord_csv" ]]; then
+    IFS=',' read -r evo2_chrom evo2_position <<<"$evo2_coord_csv"
+  fi
+  if [[ -n "$evo2_chrom" && -n "$evo2_position" ]]; then
+    evo2_variant_coordinate="${evo2_chrom}:${evo2_position}"
+  fi
+
+  if [[ -n "$variant_vcf_resolved" && -z "$missing_csv" ]]; then
+    plan_steps_csv="bash case-study-playbooks/variant-effect/run_variant_effect_case.sh --vcf ${variant_vcf_resolved} --run-id ${variant_run_id} --skills evo2 --assembly ${evo2_assembly} --continue-on-error 1"
+    plan_expected_outputs_csv=""
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/variant_effect_case_summary.json")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/logs/variant_effect_case_manifest.tsv")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/logs/unified_variant_effect_records.tsv")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/evo2_results/evo2_variant_effect_records.tsv")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/evo2_results/evo2_variant_effect_records.json")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${variant_output_root}/evo2_results/evo2_variant_batch_summary.json")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "evo2-single-skill-vcf-batch-fastpath-enabled")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "evo2-adaptive-window-fallback-enabled")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "evo2-summary-includes-window-len-and-downgrade-history")"
+  elif [[ -n "$evo2_variant_coordinate" ]]; then
+    if in_csv_list "coordinate-or-interval" "$missing_csv"; then
+      missing_csv="$(remove_csv_item "$missing_csv" "coordinate-or-interval")"
+      provided_csv="$(append_csv "$provided_csv" "coordinate-or-interval")"
+    fi
+    if in_csv_list "coordinate-or-interval" "$missing_canonical_csv"; then
+      missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "coordinate-or-interval")"
+      provided_canonical_csv="$(append_csv "$provided_canonical_csv" "coordinate-or-interval")"
+    fi
+    if in_csv_list "ref-alt-or-variant-spec" "$missing_csv"; then
+      missing_csv="$(remove_csv_item "$missing_csv" "ref-alt-or-variant-spec")"
+      provided_csv="$(append_csv "$provided_csv" "ref-alt-or-variant-spec")"
+      plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "evo2-alt-default-rule:to-G-unless-ref-G-then-T")"
+    fi
+    if in_csv_list "ref-alt-or-variant-spec" "$missing_canonical_csv"; then
+      missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "ref-alt-or-variant-spec")"
+      provided_canonical_csv="$(append_csv "$provided_canonical_csv" "ref-alt-or-variant-spec")"
+    fi
+
+    evo2_log_path="${evo2_output_dir}/evo2_variant_effect.log"
+    plan_steps_csv="set -a; source .env; set +a; mkdir -p ${evo2_output_dir}; conda run -n evo2-py311 python skills/evo2-inference/scripts/run_real_evo2_workflow.py --variant-coordinate ${evo2_variant_coordinate} --variant-window-len 2048 --output-dir ${evo2_output_dir} 2>&1 | tee ${evo2_log_path}"
+    plan_expected_outputs_csv=""
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${evo2_output_dir}/evo2_real_workflow_results.json")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-plot:${evo2_output_dir}/evo2_chr12_variant_effect.png")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-plot:${evo2_output_dir}/evo2_chr19_forward_embedding_generation.png")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${evo2_log_path}")"
+    plan_fallbacks_csv="$(append_csv "$plan_fallbacks_csv" "set -a; source .env; set +a; mkdir -p ${evo2_output_dir}; http_proxy=http://127.0.0.1:7890 https_proxy=http://127.0.0.1:7890 grpc_proxy=http://127.0.0.1:7890 conda run -n evo2-py311 python skills/evo2-inference/scripts/run_real_evo2_workflow.py --variant-coordinate ${evo2_variant_coordinate} --variant-window-len 1024 --output-dir ${evo2_output_dir} 2>&1 | tee ${evo2_log_path}")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "evo2-single-site-fastpath-enabled")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "evo2-adaptive-window-fallback-enabled")"
+  fi
+fi
+
+if [[ "$effective_task" == "variant-effect" && "$variant_multi_plan_enabled" -eq 0 && "$primary_skill" == "alphagenome-api" ]]; then
   ag_assembly="$(extract_alphagenome_assembly_from_query "$query_lc")"
   ag_variant_csv="$(extract_alphagenome_variant_from_query "$query")"
   ag_output_dir="$(extract_alphagenome_output_dir_from_query "$query")"
@@ -2023,7 +2666,33 @@ if [[ "$effective_task" == "variant-effect" && "$primary_skill" == "alphagenome-
     IFS=',' read -r ag_chrom ag_position ag_alt <<<"$ag_variant_csv"
   fi
 
-  if [[ -n "$ag_assembly" && -n "$ag_chrom" && -n "$ag_position" && -n "$ag_alt" ]]; then
+  if [[ -z "$ag_assembly" ]]; then
+    ag_assembly="$variant_assembly"
+  fi
+  if [[ -z "$ag_assembly" ]]; then
+    ag_assembly="hg38"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "default-assembly:hg38")"
+  fi
+
+  if [[ -n "$variant_vcf_resolved" && -n "$ag_assembly" && -z "$missing_csv" ]]; then
+    if in_csv_list "assembly" "$missing_csv"; then
+      missing_csv="$(remove_csv_item "$missing_csv" "assembly")"
+      provided_csv="$(append_csv "$provided_csv" "assembly")"
+    fi
+    ag_log_path="${ag_output_dir}/alphagenome_vcf_batch.log"
+    ag_vcf_stem="$(basename "${variant_vcf_resolved%.vcf}")"
+    ag_tissues_tsv="${ag_output_dir}/${ag_vcf_stem}_tissues.tsv"
+    ag_step_cmd="set -a; source .env; set +a; mkdir -p ${ag_output_dir}; ${ag_conda_cmd:-conda run -n ${ag_env_name}} python skills/alphagenome-api/scripts/run_alphagenome_vcf_batch.py --input ${variant_vcf_resolved} --assembly ${ag_assembly} --output-dir ${ag_output_dir} --non-interactive --request-timeout-sec 120 2>&1 | tee ${ag_log_path}"
+    ag_fallback_cmd="set -a; source .env; set +a; mkdir -p ${ag_output_dir}; grpc_proxy=http://127.0.0.1:7890 http_proxy=http://127.0.0.1:7890 https_proxy=http://127.0.0.1:7890 ${ag_conda_cmd:-conda run -n ${ag_env_name}} python skills/alphagenome-api/scripts/run_alphagenome_vcf_batch.py --input ${variant_vcf_resolved} --assembly ${ag_assembly} --output-dir ${ag_output_dir} --non-interactive --request-timeout-sec 120 2>&1 | tee ${ag_log_path}"
+
+    plan_steps_csv="$ag_step_cmd"
+    plan_expected_outputs_csv=""
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${ag_tissues_tsv}")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${ag_output_dir}/alphagenome_variant_batch_summary.json")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${ag_log_path}")"
+    plan_fallbacks_csv="$(append_csv "$plan_fallbacks_csv" "$ag_fallback_cmd")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "alphagenome-vcf-batch-fastpath-enabled")"
+  elif [[ -n "$ag_assembly" && -n "$ag_chrom" && -n "$ag_position" && -n "$ag_alt" ]]; then
     if in_csv_list "assembly" "$missing_csv"; then
       missing_csv="$(remove_csv_item "$missing_csv" "assembly")"
       provided_csv="$(append_csv "$provided_csv" "assembly")"

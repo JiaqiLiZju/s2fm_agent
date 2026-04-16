@@ -72,6 +72,8 @@ parse_cases() {
       required_step_contains = ""
       required_expected_output_contains = ""
       required_selected_skill = ""
+      required_assumption_contains = ""
+      forbidden_step_contains = ""
     }
     function trim(s) {
       gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
@@ -87,7 +89,7 @@ parse_cases() {
     }
     function emit_case() {
       if (case_id != "") {
-        print case_id, query, task, min_steps, min_outputs, required_step_contains, required_expected_output_contains, required_selected_skill
+        print case_id, query, task, min_steps, min_outputs, required_step_contains, required_expected_output_contains, required_selected_skill, required_assumption_contains, forbidden_step_contains
       }
     }
     /^[[:space:]]*-[[:space:]]id:[[:space:]]*/ {
@@ -102,6 +104,8 @@ parse_cases() {
       required_step_contains = ""
       required_expected_output_contains = ""
       required_selected_skill = ""
+      required_assumption_contains = ""
+      forbidden_step_contains = ""
       next
     }
     /^[[:space:]]*query:[[:space:]]*/ {
@@ -144,6 +148,18 @@ parse_cases() {
       required_selected_skill = $0
       sub(/^[[:space:]]*required_selected_skill:[[:space:]]*/, "", required_selected_skill)
       required_selected_skill = unquote(required_selected_skill)
+      next
+    }
+    /^[[:space:]]*required_assumption_contains:[[:space:]]*/ {
+      required_assumption_contains = $0
+      sub(/^[[:space:]]*required_assumption_contains:[[:space:]]*/, "", required_assumption_contains)
+      required_assumption_contains = unquote(required_assumption_contains)
+      next
+    }
+    /^[[:space:]]*forbidden_step_contains:[[:space:]]*/ {
+      forbidden_step_contains = $0
+      sub(/^[[:space:]]*forbidden_step_contains:[[:space:]]*/, "", forbidden_step_contains)
+      forbidden_step_contains = unquote(forbidden_step_contains)
       next
     }
     END {
@@ -221,7 +237,7 @@ total=0
 passed=0
 failed=0
 
-while IFS=$'\x1f' read -r case_id query task min_steps min_outputs required_step_contains required_expected_output_contains required_selected_skill; do
+while IFS=$'\x1f' read -r case_id query task min_steps min_outputs required_step_contains required_expected_output_contains required_selected_skill required_assumption_contains forbidden_step_contains; do
   [[ -z "$case_id" ]] && continue
   total=$((total + 1))
 
@@ -328,12 +344,33 @@ while IFS=$'\x1f' read -r case_id query task min_steps min_outputs required_step
     fi
   fi
 
+  if [[ -n "$forbidden_step_contains" ]]; then
+    if contains_fragment_ci "$runnable_steps_csv" "$forbidden_step_contains"; then
+      failed=$((failed + 1))
+      echo "fail: $case_id" >&2
+      echo "  runnable_steps unexpectedly contains forbidden fragment: $forbidden_step_contains" >&2
+      echo "  runnable_steps: ${runnable_steps_csv:-none}" >&2
+      continue
+    fi
+  fi
+
   if [[ -n "$required_expected_output_contains" ]]; then
     if ! contains_fragment_ci "$expected_outputs_csv" "$required_expected_output_contains"; then
       failed=$((failed + 1))
       echo "fail: $case_id" >&2
       echo "  expected_outputs missing required fragment: $required_expected_output_contains" >&2
       echo "  expected_outputs: ${expected_outputs_csv:-none}" >&2
+      continue
+    fi
+  fi
+
+  if [[ -n "$required_assumption_contains" ]]; then
+    assumptions_csv="$(extract_plan_array_csv "$output" "assumptions")"
+    if ! contains_fragment_ci "$assumptions_csv" "$required_assumption_contains"; then
+      failed=$((failed + 1))
+      echo "fail: $case_id" >&2
+      echo "  assumptions missing required fragment: $required_assumption_contains" >&2
+      echo "  assumptions: ${assumptions_csv:-none}" >&2
       continue
     fi
   fi

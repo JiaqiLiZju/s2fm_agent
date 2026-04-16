@@ -22,6 +22,8 @@ legacy_key_map:
   coordinate: coordinate-or-interval
   variant-spec: ref-alt-or-variant-spec
   interval-or-variant: coordinate-or-interval
+  vcf: vcf-input
+  vcf-path: vcf-input
 
 inputs:
   - key: target-stack-or-model-family
@@ -162,6 +164,17 @@ inputs:
     examples:
       - "REF A ALT G"
       - "T>G"
+
+  - key: vcf-input
+    type: path
+    query_tokens:
+      - vcf
+      - vcf-input
+      - variant file
+      - 变异文件
+      - 位点文件
+    examples:
+      - "case-study-playbooks/variant-effect/vcf/Test.geuvadis.vcf"
 
   - key: task-objective
     type: string

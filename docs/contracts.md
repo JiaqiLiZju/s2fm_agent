@@ -35,11 +35,11 @@ For the four core executable tasks, the output contract defines the expected sha
 
 | Field | Value |
 |---|---|
-| `assumptions` | coordinate-convention-must-be-explicit, ref-alt-interpretation-limited-to-selected-model, vcf-pos-is-1based-passed-directly-to-genome-variant, indel-supported-snp-and-multibase-ref-alt, info-fields-collected-by-two-pass-and-transparently-output |
-| `runnable_steps` | `bash scripts/run_agent.sh --task variant-effect --query {selected_skill}-variant-effect-workflow`; `bash scripts/execute_plan.sh --task variant-effect --query {selected_skill}-variant-effect-workflow --dry-run`; `python skills/alphagenome-api/scripts/run_alphagenome_predict_variant.py --variant-spec <chr:pos:alt> --assembly hg38|hg19 --output-dir <dir>`; `python skills/alphagenome-api/scripts/run_alphagenome_vcf_batch.py --input <file.vcf> --assembly hg38|hg19 --output-dir <dir> --non-interactive` |
-| `expected_outputs` | plan-json:variant-effect, alphagenome_variant-effect_<chrom>_<position>_<ref>_to_<alt>_result.json, alphagenome_variant-effect_<chrom>_<position>_<ref>_to_<alt>_rnaseq_overlay.png, <vcf_stem>_tissues.tsv |
-| `fallbacks` | ask-for-missing-variant-spec, retry-with-network-proxy-once-if-client-create-times-out |
-| `retry_policy` | clarify-missing-inputs-then-connectivity-proxy-retry-once |
+| `assumptions` | coordinate-convention-must-be-explicit, ref-alt-interpretation-limited-to-selected-model, explicit-compare-intent-required-for-multi-skill-composition, vcf-batch-manifest-normalizes-to-snp-records-with-status-tracking, unified-output-defaults-to-wide-table-plus-per-skill-standardized-records, evo2-prefers-large-window-then-adaptive-window-fallback |
+| `runnable_steps` | `bash scripts/run_agent.sh --task variant-effect --query {selected_skill}-variant-effect-workflow`; explicit multi-skill: `bash case-study-playbooks/variant-effect/run_variant_effect_case.sh --vcf <file.vcf> --run-id <YYYYMMDDTHHMMSSZ> --skills alphagenome,borzoi,evo2,gpn --assembly hg38 --continue-on-error 1` |
+| `expected_outputs` | plan-json:variant-effect, case-study-playbooks/variant-effect/<run_id>/variant_effect_case_summary.json, case-study-playbooks/variant-effect/<run_id>/logs/variant_effect_case_manifest.tsv, case-study-playbooks/variant-effect/<run_id>/logs/unified_variant_effect_records.tsv, case-study-playbooks/variant-effect/<run_id>/logs/unified_variant_effect_records.json, plus per-skill `*_variant_effect_records.tsv` |
+| `fallbacks` | ask-for-missing-variant-spec, fallback-to-single-primary-skill-when-no-explicit-compare-intent, retry-with-network-proxy-once-if-hosted-api-times-out |
+| `retry_policy` | adaptive-window-fallback-with-timeout-proxy-retry |
 
 ### embedding
 
@@ -79,7 +79,7 @@ When a plan step fails, the recovery policy defines the retry strategy and order
 
 | Task | Retry policy | Fallback skills (ordered) |
 |---|---|---|
-| `variant-effect` | clarify-missing-inputs-then-connectivity-proxy-retry-once | borzoi-workflows, gpn-models, evo2-inference |
+| `variant-effect` | adaptive-window-fallback-with-timeout-proxy-retry | borzoi-workflows, gpn-models, evo2-inference |
 | `embedding` | clarify-embedding-target-then-retry-once | nucleotide-transformer-v3, evo2-inference |
 | `fine-tuning` | clarify-dataset-schema-then-retry-once | dnabert2 |
 | `track-prediction` | clarify-interval-or-bed-then-per-interval-network-retry-once | alphagenome-api, nucleotide-transformer-v3, borzoi-workflows, segment-nt |

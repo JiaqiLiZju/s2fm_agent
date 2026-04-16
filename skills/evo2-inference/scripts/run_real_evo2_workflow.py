@@ -33,6 +33,7 @@ UCSC_BASE = "https://api.genome.ucsc.edu/getData/sequence"
 EVO2_MODEL = "evo2-7b"
 EVO2_BASE = f"https://health.api.nvidia.com/v1/biology/arc/{EVO2_MODEL}"
 EVO2_GENERATE_FALLBACK_BASE = "https://health.api.nvidia.com/v1/biology/arc/evo2-40b"
+EVO2_FORWARD_FALLBACK_BASE = "https://health.api.nvidia.com/v1/biology/arc/evo2-40b"
 INTERVAL_RE = re.compile(r"(chr[\w]+):([0-9_,]+)-([0-9_,]+)", flags=re.IGNORECASE)
 COORD_RE = re.compile(r"(chr[\w]+):([0-9_,]+)", flags=re.IGNORECASE)
 
@@ -120,37 +121,57 @@ def fetch_hg38_sequence(chrom: str, start_1based: int, end_1based: int) -> str:
 
 
 def evo2_forward(api_key: str, sequence: str, output_layer: str) -> np.ndarray:
-    """Call Evo2 forward endpoint and decode a single requested output layer."""
-    payload = {"sequence": sequence, "output_layers": [output_layer]}
-    last_err = None
-    resp = None
-    for attempt in range(1, 4):
-        resp = requests.post(
-            f"{EVO2_BASE}/forward",
-            headers={"Authorization": f"Bearer {api_key}"},
-            json=payload,
-            timeout=180,
-        )
-        if resp.status_code == 200:
-            break
-        last_err = f"attempt={attempt}, status={resp.status_code}, body={resp.text}"
-        time.sleep(1.5 * attempt)
-    if resp is None or resp.status_code != 200:
-        raise RuntimeError(f"Forward request failed: {last_err}")
+    """Call Evo2 forward endpoint and decode a single requested output layer.
 
-    data_b64 = resp.json()["data"]
-    raw = base64.b64decode(data_b64)
-    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
-        names = zf.namelist()
-        target = None
-        for name in names:
-            if name.startswith(f"{output_layer}.") and name.endswith(".npy"):
-                target = name
-                break
-        if target is None:
-            raise RuntimeError(f"Layer {output_layer} not found in forward response")
-        arr = np.load(io.BytesIO(zf.read(target)))
-    return arr
+    Tries evo2-7b first, then falls back to evo2-40b when forward on 7b is degraded.
+    """
+    payload = {"sequence": sequence, "output_layers": [output_layer]}
+    bases = [EVO2_BASE, EVO2_FORWARD_FALLBACK_BASE]
+    all_errors = []
+
+    for base in bases:
+        resp = None
+        last_err = None
+        for attempt in range(1, 4):
+            print(f"[forward] try base={base.rsplit('/', 1)[-1]} attempt={attempt}", flush=True)
+            try:
+                resp = requests.post(
+                    f"{base}/forward",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    json=payload,
+                    timeout=180,
+                )
+            except requests.RequestException as exc:
+                last_err = f"base={base}, attempt={attempt}, request_error={type(exc).__name__}: {exc}"
+                time.sleep(1.5 * attempt)
+                continue
+            if resp.status_code == 200:
+                data_b64 = resp.json()["data"]
+                raw = base64.b64decode(data_b64)
+                with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+                    names = zf.namelist()
+                    target = None
+                    for name in names:
+                        if name.startswith(f"{output_layer}.") and name.endswith(".npy"):
+                            target = name
+                            break
+                    if target is None:
+                        raise RuntimeError(
+                            f"Layer {output_layer} not found in forward response from {base}"
+                        )
+                    return np.load(io.BytesIO(zf.read(target)))
+
+            last_err = (
+                f"base={base}, attempt={attempt}, status={resp.status_code}, body={resp.text}"
+            )
+            time.sleep(1.5 * attempt)
+
+        if last_err:
+            all_errors.append(last_err)
+        else:
+            all_errors.append(f"base={base}, unknown error")
+
+    raise RuntimeError("Forward request failed: " + " | ".join(all_errors))
 
 
 def evo2_generate(

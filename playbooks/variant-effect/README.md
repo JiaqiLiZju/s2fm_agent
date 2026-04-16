@@ -2,161 +2,112 @@
 
 ## Purpose
 
-Provide a contract-aligned orchestration pattern for variant-effect requests.
+Provide one contract-aligned playbook for:
 
-## Use This When
-
-- The user needs REF vs ALT impact guidance.
-- The user asks for variant prioritization or variant scoring workflows.
-- The user wants model-specific caveats before execution.
+- single-skill variant-effect execution (default behavior)
+- explicit multi-skill comparison execution (opt-in behavior)
 
 ## Required Inputs (Canonical Keys)
 
-Required task-contract keys:
+Required:
 
 - `assembly`
 - `coordinate-or-interval`
 - `ref-alt-or-variant-spec`
 
-Optional context that improves routing quality:
+Optional but strongly recommended for batch mode:
 
-- species
-- output modality (for example RNA-related tracks)
-- execution path preference (local vs hosted)
+- `vcf-input`
+- `output-dir` or run-root preference
 
-## Skill Selection Heuristics
+## Routing and Trigger Rules
 
-1. Prefer `alphagenome-api` when the query explicitly asks for AlphaGenome API methods.
-2. Prefer `borzoi-workflows` for Borzoi tutorial-grounded variant workflows.
-3. Prefer `gpn-models` for framework-selection-heavy variant analysis.
-4. Consider `evo2-inference` when local GPU constraints suggest hosted fallback.
+Default path:
 
-## Execution Modes
+- Keep single primary skill execution.
 
-### 1) Orchestration (`run_agent.sh`)
+Multi-skill comparison path:
 
-Text output:
+- Trigger only when both are true:
+  - query includes explicit comparison intent keyword: `compare`, `comparison`, `benchmark`, `all-skills`, `multi-skill`, `对比`, `比较`, `多技能`, `多模型`, `全量`
+  - query explicitly names at least 2 variant-effect skills among `alphagenome-api`, `borzoi-workflows`, `evo2-inference`, `gpn-models`
 
-```bash
-bash scripts/run_agent.sh \
-  --task variant-effect \
-  --query 'Use $alphagenome-api variant-effect on hg38 chr12 position 1000000 ALT G and save outputs to <output_dir>' \
-  --format text
-```
+No comparison keyword:
 
-JSON output:
+- Even if multiple skills are mentioned, stay in single-skill execution.
+
+## Entry Points
+
+Single-skill route:
 
 ```bash
 bash scripts/run_agent.sh \
   --task variant-effect \
-  --query 'Use $alphagenome-api variant-effect on hg38 chr12 position 1000000 ALT G and save outputs to <output_dir>' \
+  --query 'Use $borzoi-workflows variant-effect on hg38 chr12 position 1000000 ALT G and save outputs to output/borzoi' \
   --format json
 ```
 
-Expected checkpoint:
-
-- `decision: route`
-- `missing_inputs: []`
-- `plan.runnable_steps` and `plan.expected_outputs` are present
-
-### 2) Plan Validation (`execute_plan.sh`)
-
-Dry-run:
+Explicit multi-skill route:
 
 ```bash
-bash scripts/execute_plan.sh \
+bash scripts/run_agent.sh \
   --task variant-effect \
-  --query 'Use $alphagenome-api variant-effect on hg38 chr12 position 1000000 ALT G and save outputs to <output_dir>' \
-  --format text
+  --query 'Compare variant-effect across $alphagenome-api $borzoi-workflows $evo2-inference $gpn-models on case-study-playbooks/variant-effect/vcf/Test.geuvadis.vcf, assembly hg38' \
+  --format json
 ```
 
-Real execution:
+Case runner (direct):
 
 ```bash
-set -a; source .env; set +a
-bash scripts/execute_plan.sh \
-  --task variant-effect \
-  --query 'Use $alphagenome-api variant-effect on hg38 chr12 position 1000000 ALT G and save outputs to <output_dir>' \
-  --run \
-  --format text
-```
-
-### 3) AlphaGenome Single-Variant Real Run
-
-```bash
-set -a; source .env; set +a
-conda run -p /path/to/alphagenome-py310-env \
-  python skills/alphagenome-api/scripts/run_alphagenome_predict_variant.py \
-  --variant-spec chr12:1000000:G \
+bash case-study-playbooks/variant-effect/run_variant_effect_case.sh \
+  --vcf case-study-playbooks/variant-effect/vcf/Test.geuvadis.vcf \
+  --run-id "$(date -u +%Y%m%dT%H%M%SZ)" \
+  --skills alphagenome,borzoi,evo2,gpn \
   --assembly hg38 \
-  --output-dir <output_dir> \
-  --request-timeout-sec 120
+  --continue-on-error 1
 ```
 
-If `dna_client.create(...)` times out, retry once with proxy variables:
+## VCF Batch Contract
 
-```bash
-set -a; source .env; set +a
-grpc_proxy=http://127.0.0.1:7890 \
-http_proxy=http://127.0.0.1:7890 \
-https_proxy=http://127.0.0.1:7890 \
-conda run -p /path/to/alphagenome-py310-env \
-  python skills/alphagenome-api/scripts/run_alphagenome_predict_variant.py \
-  --variant-spec chr12:1000000:G \
-  --assembly hg38 \
-  --output-dir <output_dir> \
-  --request-timeout-sec 120
-```
+`run_variant_effect_case.sh` enforces:
 
-### 4) AlphaGenome VCF Batch Real Run
+- input validation: VCF must exist and be non-empty
+- SNP filtering: only A/C/G/T single-base REF/ALT entries enter the batch manifest
+- dropped non-SNP records are counted in summary metadata
+- run root naming: UTC `YYYYMMDDTHHMMSSZ`
+- per-row failure recording fields include `status`, `error`, `run_time_utc`, `result_json`
 
-```bash
-set -a; source .env; set +a
-conda run -p /path/to/alphagenome-py310-env \
-  python skills/alphagenome-api/scripts/run_alphagenome_vcf_batch.py \
-  --input <variants.vcf> \
-  --assembly hg38 \
-  --output-dir <output_dir> \
-  --non-interactive \
-  --request-timeout-sec 120
-```
+## Evo2 Stability Contract
 
-Notes:
+Default policy:
 
-- Output file pattern is `<vcf_stem>_tissues.tsv`.
-- `run_alphagenome_vcf_batch.py` retries `dna_client.create(...)` once with proxy variables by default when the first attempt times out.
-- Use `--proxy-url ''` to disable retry or `--proxy-url <url>` to set a custom proxy endpoint.
+- try higher windows first (`2048 -> 1024 -> 512 -> 256`)
+- for each window: direct request first, optional proxy retry second
+- stop early once all variants succeed
 
-## Result Acceptance Template
+Audit requirements:
 
-1. File exists and is non-empty.
-```bash
-test -s <result_file> && echo "ok: result file exists and non-empty"
-```
+- summary must record final effective `window_len`
+- summary must record downgrade/attempt history
 
-2. `assembly` column is consistent.
-```bash
-awk -F'\t' 'NR>1{c[$7]++} END{for(k in c) print k"\t"c[k]}' <result_file>
-```
+## Unified Outputs
 
-3. `status` distribution is visible.
-```bash
-awk -F'\t' 'NR==1{for(i=1;i<=NF;i++) if($i=="status") s=i; next} {cnt[$s]++} END{for(k in cnt) print k"\t"cnt[k]}' <result_file>
-```
+Run root: `case-study-playbooks/variant-effect/<run_id>/`
 
-4. Inspect failed samples (if any).
-```bash
-awk -F'\t' 'NR==1{for(i=1;i<=NF;i++){if($i=="status")s=i; if($i=="error")e=i; if($i=="chrom")c=i; if($i=="position")p=i; if($i=="ref")r=i; if($i=="alt")a=i;} next} $s!="success"{print $c":"$p":"$r">"$a"\t"$e}' <result_file> | head -n 10
-```
+Mandatory:
 
-## Clarify & Retry
+- `variant_effect_case_summary.json`
+- `logs/variant_effect_case_manifest.tsv`
+- `logs/unified_variant_effect_records.tsv` (wide table primary output)
+- `logs/unified_variant_effect_records.json`
 
-1. If `missing_inputs` is non-empty, clarify in this order: `assembly` -> `coordinate-or-interval` -> `ref-alt-or-variant-spec`.
-2. Re-run `run_agent.sh` and confirm `missing_inputs: []`.
-3. Re-run `execute_plan.sh --dry-run` before any heavy run.
-4. If network timeout occurs, retry once with proxy variables (or use VCF batch script default retry behavior).
+Per-skill standardized records:
 
-## Related Playbooks
+- `<skill>_results/<skill>_variant_effect_records.tsv`
+- `<skill>_results/<skill>_variant_effect_records.json`
+- `<skill>_results/<skill>_variant_effect_schema.md`
+
+## Related
 
 - [Getting Started](../getting-started/README.md)
 - [Troubleshooting](../troubleshooting/README.md)

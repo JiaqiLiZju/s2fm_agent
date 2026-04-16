@@ -41,7 +41,7 @@ Required inputs by task:
 
 - `environment-setup`: OS/runtime + target stack + hardware context
 - `embedding`: sequence or interval + species/assembly (when interval-based) + expected output
-- `variant-effect`: assembly + coordinate + allele or interval spec + selected modality
+- `variant-effect`: assembly + coordinate/interval or VCF input + allele/variant spec + selected modality
 - `fine-tuning`: dataset schema + target label task + compute constraints
 - `track-prediction`: species + assembly + interval + model/head choice
 - `troubleshooting`: failing step or error + runtime context
@@ -93,3 +93,10 @@ Fine-tuning disambiguation rule:
 
 - Prefer `dnabert2` for generic CSV/classification fine-tuning requests.
 - Prefer `nucleotide-transformer-v3` when the request explicitly targets NTv3 and/or bigwig or annotation heads with species-conditioned setup.
+
+Variant-effect multi-skill composition rule:
+
+- Keep single primary skill by default.
+- Only emit a composite multi-skill variant-effect execution plan when both are true:
+  - explicit comparison intent is present (`compare`, `comparison`, `benchmark`, `all-skills`, `multi-skill`, `对比`, `比较`, `多技能`, `多模型`, `全量`)
+  - query explicitly mentions at least 2 variant-effect skills among `alphagenome-api`, `borzoi-workflows`, `evo2-inference`, `gpn-models`.
