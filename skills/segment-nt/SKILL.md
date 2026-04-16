@@ -48,6 +48,11 @@ Use this skill for segmentation models built around the NT ecosystem. Prefer the
 5. Prefer the reusable interval script for real-region runs.
 - For UCSC interval fetch + SegmentNT inference + track plotting, use [scripts/run_segment_nt_region.py](scripts/run_segment_nt_region.py).
 
+6. For s2f track-prediction case-study runs, prefer BED batch wrappers.
+- Use `case-study-playbooks/track_prediction/run_segment_nt_track_case.sh` for batch execution.
+- Default output root should be `case-study-playbooks/track_prediction/<run_id>/segmentnt_results`.
+- Treat `segmentnt_bed_batch_summary.json` as the batch execution contract, with per-interval artifacts (`*_trackplot.png`, `*_result.json`, `*_probs.npz`, interval logs).
+
 ## Grounded API Surface
 
 Treat the following names and patterns as grounded by the bundled docs:

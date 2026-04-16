@@ -78,6 +78,12 @@ When no explicit skill is mentioned, the router selects from these defaults (ord
 
 Source: `agent/ROUTING.md`
 
+Track-prediction planner behavior (run_agent fastpath):
+
+- If the query explicitly mentions multiple track skills, `run_agent.sh` emits a composite multi-step runnable plan (ordered: AlphaGenome -> NTv3 -> Borzoi -> SegmentNT).
+- Default output root is inferred as `case-study-playbooks/track_prediction/<run_id>/` when output directories are not explicitly provided.
+- BED resolution priority is: absolute path -> repo-relative path -> `case-study-playbooks/track_prediction/bed/` fallback, with explicit validation error text when unresolved.
+
 Fine-tuning disambiguation:
 
 - Prefer `dnabert2` for generic CSV/classification fine-tuning requests.

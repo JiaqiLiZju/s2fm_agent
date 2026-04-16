@@ -2,13 +2,13 @@
 
 ## Purpose
 
-Provide a contract-aligned orchestration pattern for sequence-to-track prediction tasks.
+Provide a contract-aligned orchestration pattern for batch sequence-to-track prediction tasks.
 
 ## Use This When
 
-- The user requests signal track prediction from sequence or interval input.
-- The user needs model-head-aware output planning.
-- The user wants safe defaults for species and assembly handling.
+- The user requests track prediction from BED intervals or genomic intervals.
+- The user wants runnable plans for AlphaGenome, NTv3, Borzoi, SegmentNT, or a multi-skill comparison.
+- The user needs standardized batch summaries plus per-interval artifacts.
 
 ## Required Inputs (Canonical Keys)
 
@@ -17,106 +17,71 @@ Required task-contract keys:
 - `species`
 - `assembly`
 - `sequence-or-interval`
-- `output-head`
 
 Optional context that improves response quality:
 
-- model preference
-- output length or center-crop expectation
-- desired plot/export format
+- explicit `output-head` (AlphaGenome defaults to `RNA_SEQ`)
+- explicit `run_id`
+- explicit per-skill output directory
+
+## Output Contract (Batch Semantics)
+
+The normalized default output root is:
+
+- `case-study-playbooks/track_prediction/<run_id>/`
+
+Expected per-skill summaries:
+
+- `alphagenome_results/alphagenome_track_bed_batch_summary.json`
+- `ntv3_results/ntv3_bed_batch_summary.json`
+- `borzoi_results/borzoi_bed_batch_summary.json`
+- `segmentnt_results/segmentnt_bed_batch_summary.json`
+
+Per-interval artifacts are recorded by each summary and include plots, result JSON files, and run logs.
 
 ## Skill Selection Heuristics
 
-1. Prefer `alphagenome-api` when the request explicitly targets AlphaGenome API / `predict_interval` / ontology-conditioned heads (for example `RNA_SEQ`).
-2. Prefer `nucleotide-transformer-v3` for NTv3 species-conditioned outputs.
-3. Prefer `segment-nt` for SegmentNT-family segmentation-style outputs.
-4. Prefer `borzoi-workflows` for Borzoi tutorial and interpretation workflows.
+1. Prefer `alphagenome-api` when ontology-conditioned heads are requested.
+2. Prefer `nucleotide-transformer-v3` for NTv3 species-conditioned track outputs.
+3. Prefer `borzoi-workflows` for Borzoi RNA-seq track outputs.
+4. Prefer `segment-nt` for SegmentNT segmentation probability tracks.
+5. Use multi-skill composite planning when the query explicitly requests multiple skills.
 
-## Runbook (Minimal Reproducible Commands)
+## Runbook (Minimal Commands)
 
-Text output:
+Generate plan (text):
 
 ```bash
 bash scripts/run_agent.sh \
   --task track-prediction \
-  --query 'Need track prediction for human hg38 interval with explicit output head' \
+  --query 'Run track prediction BED batch for human hg38 using alphagenome ntv3 borzoi segmentnt on case-study-playbooks/track_prediction/bed/Test.interval.bed' \
   --format text
 ```
 
-JSON output:
+Generate plan (json):
 
 ```bash
 bash scripts/run_agent.sh \
   --task track-prediction \
-  --query 'Need track prediction for human hg38 interval with explicit output head' \
+  --query 'Run track prediction BED batch for human hg38 using alphagenome ntv3 borzoi segmentnt on case-study-playbooks/track_prediction/bed/Test.interval.bed' \
   --format json
 ```
 
-Dry-run execution validation:
+Run the case-study orchestrator directly:
 
 ```bash
-bash scripts/execute_plan.sh \
-  --task track-prediction \
-  --query 'Need track prediction for human hg38 interval with explicit output head' \
-  --format text
+bash case-study-playbooks/track_prediction/run_track_prediction_case.sh \
+  --bed case-study-playbooks/track_prediction/bed/Test.interval.bed \
+  --run-id 20260416T105020Z \
+  --skills alphagenome,ntv3,borzoi,segmentnt
 ```
-
-## Learn (Step-by-step + checkpoints + common failures)
-
-Step 1: generate routing + plan output.
-
-```bash
-bash scripts/run_agent.sh \
-  --task track-prediction \
-  --query 'Need track prediction for human hg38 interval with explicit output head using $nucleotide-transformer-v3' \
-  --format text
-```
-
-Expected checkpoint:
-
-- `decision: route`
-- `required_inputs` includes `species`, `assembly`, `sequence-or-interval`, `output-head`
-- `missing_inputs` is minimized or empty
-
-Step 2: check JSON fields for downstream automation.
-
-```bash
-bash scripts/run_agent.sh \
-  --task track-prediction \
-  --query 'Need track prediction for human hg38 interval with explicit output head using $nucleotide-transformer-v3' \
-  --format json
-```
-
-Expected checkpoint:
-
-- `primary_skill` is present
-- `plan.expected_outputs` includes track-oriented output hints
-
-Step 3: dry-run execution contract.
-
-```bash
-bash scripts/execute_plan.sh \
-  --task track-prediction \
-  --query 'Need track prediction for human hg38 interval with explicit output head using $nucleotide-transformer-v3' \
-  --format text
-```
-
-Expected checkpoint:
-
-- dry-run summary indicates no failure
-
-Common failure signatures and quick fixes:
-
-- `missing_inputs` includes `output-head` -> name the expected output head/modality explicitly.
-- `decision: clarify` -> add `--task track-prediction` and species/assembly details.
-- unclear interval format -> specify chromosome + interval style consistently in query.
 
 ## Clarify & Retry
 
-1. Read `missing_inputs` and resolve in this order: `species`, `assembly`, `sequence-or-interval`, `output-head`.
-2. Ask one concrete follow-up question per unresolved key.
-3. Re-run with clarified values and verify the generated `plan`.
-4. Use `execute_plan.sh` dry-run to validate runnable steps.
+1. Confirm `species`, `assembly`, and BED/interval input first.
+2. If BED path is invalid, resolve in this order: absolute path, repo-relative path, `case-study-playbooks/track_prediction/bed/` fallback.
+3. Retry per-interval network-sensitive failures once when applicable.
+4. Use each `*_bed_batch_summary.json` as the source of truth for success/failure counts.
 
 ## Related Playbooks
 

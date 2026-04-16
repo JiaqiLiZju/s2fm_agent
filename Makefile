@@ -25,7 +25,7 @@ ifeq ($(PREFETCH_MODELS),1)
 BOOTSTRAP_FLAGS += --prefetch-models
 endif
 
-.PHONY: help link-skills validate-registry validate-registry-tracking validate-skill-metadata validate-input-contracts validate-migration-paths validate-agent eval-routing eval-groundedness eval-task-success eval-benchmark test-eval-benchmark-mock route-query run-agent execute-plan agent-console bootstrap bootstrap-persistent bootstrap-ntv3-hf bootstrap-borzoi bootstrap-evo2-light bootstrap-evo2-full prefetch-models clean-runtime smoke smoke-lite
+.PHONY: help link-skills validate-registry validate-registry-tracking validate-skill-metadata validate-input-contracts validate-routing validate-migration-paths validate-agent eval-routing eval-groundedness eval-task-success eval-benchmark test-eval-benchmark-mock route-query run-agent execute-plan agent-console bootstrap bootstrap-persistent bootstrap-ntv3-hf bootstrap-borzoi bootstrap-evo2-light bootstrap-evo2-full prefetch-models clean-runtime smoke smoke-lite
 
 help:
 	@printf '%s\n' \
@@ -35,6 +35,7 @@ help:
 	  '  make validate-registry-tracking Validate enabled registry skills are tracked and not ignored' \
 	  '  make validate-skill-metadata Validate skill.yaml completeness and registry consistency' \
 	  '  make validate-input-contracts Validate canonical input schema across task contracts and stable skills' \
+	  '  make validate-routing      Validate routing behavior using eval cases and registry metadata' \
 	  '  make validate-migration-paths Validate selected migrated skills paths and compatibility symlinks' \
 	  '  make validate-agent        Run registry + skill metadata + routing validations' \
 	  '  make eval-routing          Evaluate routing behavior using eval cases and registry metadata' \
@@ -83,6 +84,9 @@ validate-skill-metadata:
 
 validate-input-contracts:
 	bash $(REPO_ROOT)/scripts/validate_input_contracts.sh
+
+validate-routing:
+	bash $(REPO_ROOT)/scripts/validate_routing.sh
 
 validate-migration-paths:
 	bash $(REPO_ROOT)/scripts/validate_migration_paths.sh

@@ -56,6 +56,11 @@ Use this skill for the TensorFlow-based `calico/borzoi` repository workflows and
 - Legacy scripts may require old-transform flags (`-u` or `--untransform_old`).
 - Sequence-window and output-window coordinates can differ after model cropping; include both in outputs.
 
+9. For s2f track-prediction case-study runs, prefer BED batch wrappers.
+- Use `case-study-playbooks/track_prediction/run_borzoi_track_case.sh` for runnable batch execution.
+- Default output root should be `case-study-playbooks/track_prediction/<run_id>/borzoi_results`.
+- Treat `borzoi_bed_batch_summary.json` as the execution source of truth, with per-interval artifacts (`*_trackplot.png`, `*_result.json`, `*_track_prediction.npz`, `*_top_tracks.tsv`, interval logs).
+
 ## Grounded Command Surface
 
 Treat the following commands and paths as grounded:

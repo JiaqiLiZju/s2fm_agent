@@ -39,7 +39,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--device",
-        choices=["auto", "cpu", "cuda"],
+        choices=["auto", "cpu", "cuda", "mps"],
         default="auto",
         help="Inference device forwarded to single-interval runner. Default: auto.",
     )
@@ -48,6 +48,11 @@ def parse_args() -> argparse.Namespace:
         choices=["auto", "float32", "float16", "bfloat16"],
         default="auto",
         help="Inference dtype forwarded to single-interval runner. Default: auto.",
+    )
+    parser.add_argument(
+        "--save-npz",
+        action="store_true",
+        help="Forward --save-npz to single-interval runs.",
     )
     return parser.parse_args()
 
@@ -86,6 +91,7 @@ def build_single_interval_cmd(
     device: str,
     dtype: str,
     disable_xet: bool,
+    save_npz: bool,
 ) -> list[str]:
     cmd = [
         sys.executable,
@@ -109,6 +115,8 @@ def build_single_interval_cmd(
         cmd.extend(["--hf-token", hf_token])
     if disable_xet:
         cmd.append("--disable-xet")
+    if save_npz:
+        cmd.append("--save-npz")
     return cmd
 
 
@@ -116,13 +124,17 @@ def main() -> int:
     args = parse_args()
     bed_path = Path(args.bed).expanduser()
     if not bed_path.is_absolute():
-        bed_path = Path.cwd() / bed_path
+        bed_path = (Path.cwd() / bed_path).resolve()
+    else:
+        bed_path = bed_path.resolve()
     if not bed_path.exists():
         raise SystemExit(f"BED file not found: {bed_path}")
 
     output_dir = Path(args.output_dir).expanduser()
     if not output_dir.is_absolute():
-        output_dir = Path.cwd() / output_dir
+        output_dir = (Path.cwd() / output_dir).resolve()
+    else:
+        output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     single_runner = Path(__file__).with_name("run_track_prediction.py")
@@ -200,6 +212,7 @@ def main() -> int:
             device=args.device,
             dtype=args.dtype,
             disable_xet=False,
+            save_npz=args.save_npz,
         )
         first_code = run_with_live_log(cmd, interval_log, append=False)
         final_code = first_code
@@ -219,6 +232,7 @@ def main() -> int:
                 device=args.device,
                 dtype=args.dtype,
                 disable_xet=True,
+                save_npz=args.save_npz,
             )
             final_code = run_with_live_log(retry_cmd, interval_log, append=True)
 

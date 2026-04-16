@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: "2026-03-27"
+updated_at: "2026-04-16"
 contracts:
   variant-effect:
     assumptions:
@@ -68,14 +68,20 @@ contracts:
   track-prediction:
     assumptions:
       - species-and-assembly-must-be-provided
-      - output-head-definition-must-match-selected-model
+      - bed-batch-summary-is-source-of-truth-for-partial-failures
+      - per-interval-artifacts-must-land-under-track-run-root
     runnable_steps:
       - bash scripts/run_agent.sh --task track-prediction --query {selected_skill}-track-prediction-workflow
       - awk 'NR<=120{print}' playbooks/track-prediction/README.md
     expected_outputs:
       - plan-json:track-prediction
-      - expected-file:track-prediction-result.json
-      - expected-plot:track-prediction.png
+      - expected-file:case-study-playbooks/track_prediction/<run_id>/alphagenome_results/alphagenome_track_bed_batch_summary.json
+      - expected-file:case-study-playbooks/track_prediction/<run_id>/ntv3_results/ntv3_bed_batch_summary.json
+      - expected-file:case-study-playbooks/track_prediction/<run_id>/borzoi_results/borzoi_bed_batch_summary.json
+      - expected-file:case-study-playbooks/track_prediction/<run_id>/segmentnt_results/segmentnt_bed_batch_summary.json
+      - expected-plot:case-study-playbooks/track_prediction/<run_id>/*_results/*_trackplot.png
+      - expected-file:case-study-playbooks/track_prediction/<run_id>/*_results/*_result.json
+      - expected-file:case-study-playbooks/track_prediction/<run_id>/*_results/*.log
     fallbacks:
       - fallback-to-secondary-track-skill
-    retry_policy: clarify-then-single-retry
+    retry_policy: clarify-interval-or-bed-then-per-interval-network-retry-once

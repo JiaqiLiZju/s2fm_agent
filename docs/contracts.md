@@ -20,7 +20,7 @@ Required canonical inputs per task. All keys must be present (or inferable) for 
 | `embedding` | sequence-or-interval, embedding-target | — |
 | `variant-effect` | assembly, coordinate-or-interval, ref-alt-or-variant-spec | — |
 | `fine-tuning` | task-objective, dataset-schema, compute-constraints | — |
-| `track-prediction` | species, assembly, sequence-or-interval, output-head | — |
+| `track-prediction` | species, assembly, sequence-or-interval | — |
 | `troubleshooting` | failing-step-or-error, runtime-context | `general-troubleshooting` |
 | `loading` | model-family-objective, runtime-context | — |
 | `framework-selection` | model-family-objective, objective | — |
@@ -65,11 +65,11 @@ For the four core executable tasks, the output contract defines the expected sha
 
 | Field | Value |
 |---|---|
-| `assumptions` | species-and-assembly-must-be-provided, output-head-definition-must-match-selected-model |
+| `assumptions` | species-and-assembly-must-be-provided, bed-batch-summary-is-source-of-truth-for-partial-failures, per-interval-artifacts-must-land-under-track-run-root |
 | `runnable_steps` | `bash scripts/run_agent.sh --task track-prediction --query {selected_skill}-track-prediction-workflow` |
-| `expected_outputs` | plan-json:track-prediction, track-prediction-result.json, track-prediction.png |
+| `expected_outputs` | plan-json:track-prediction, case-study-playbooks/track_prediction/<run_id>/alphagenome_results/alphagenome_track_bed_batch_summary.json, case-study-playbooks/track_prediction/<run_id>/ntv3_results/ntv3_bed_batch_summary.json, case-study-playbooks/track_prediction/<run_id>/borzoi_results/borzoi_bed_batch_summary.json, case-study-playbooks/track_prediction/<run_id>/segmentnt_results/segmentnt_bed_batch_summary.json, case-study-playbooks/track_prediction/<run_id>/*_results/*_trackplot.png, case-study-playbooks/track_prediction/<run_id>/*_results/*_result.json, case-study-playbooks/track_prediction/<run_id>/*_results/*.log |
 | `fallbacks` | fallback-to-secondary-track-skill |
-| `retry_policy` | clarify-then-single-retry |
+| `retry_policy` | clarify-interval-or-bed-then-per-interval-network-retry-once |
 
 Source: `registry/output_contracts.yaml`
 
@@ -82,7 +82,7 @@ When a plan step fails, the recovery policy defines the retry strategy and order
 | `variant-effect` | clarify-missing-inputs-then-connectivity-proxy-retry-once | borzoi-workflows, gpn-models, evo2-inference |
 | `embedding` | clarify-embedding-target-then-retry-once | nucleotide-transformer-v3, evo2-inference |
 | `fine-tuning` | clarify-dataset-schema-then-retry-once | dnabert2 |
-| `track-prediction` | clarify-output-head-then-retry-once | alphagenome-api, borzoi-workflows, segment-nt |
+| `track-prediction` | clarify-interval-or-bed-then-per-interval-network-retry-once | alphagenome-api, nucleotide-transformer-v3, borzoi-workflows, segment-nt |
 
 Source: `registry/recovery_policies.yaml`
 

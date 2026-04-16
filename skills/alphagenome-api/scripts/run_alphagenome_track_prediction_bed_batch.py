@@ -177,6 +177,7 @@ def run_batch(
     *,
     species: str,
     assembly: str,
+    bed_path: str | None,
     input_mode: str,
     output_dir: Path,
     output_prefix: str,
@@ -352,6 +353,7 @@ def run_batch(
         "failed_count": failed_count,
         "species": species,
         "assembly": assembly,
+        "bed_path": bed_path,
         "output_head": output_head,
         "ontology_terms": ontology_terms,
         "output_dir": str(output_dir.resolve()),
@@ -403,11 +405,13 @@ def main() -> int:
     args = parse_args()
     output_dir = Path(args.output_dir).resolve()
     input_mode = "bed-batch"
+    bed_path_for_summary: str | None = None
     if args.bed:
         bed_path = Path(args.bed).resolve()
         if not bed_path.exists():
             raise FileNotFoundError(f"BED file not found: {bed_path}")
         rows = parse_bed(bed_path, args.limit)
+        bed_path_for_summary = str(bed_path)
     else:
         rows = [parse_interval_spec(args.interval)]
         input_mode = "single-interval"
@@ -425,6 +429,7 @@ def main() -> int:
         rows,
         species=args.species,
         assembly=args.assembly,
+        bed_path=bed_path_for_summary,
         input_mode=input_mode,
         output_dir=output_dir,
         output_prefix=args.output_prefix,

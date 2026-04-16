@@ -365,6 +365,39 @@ normalize_numeric_token() {
   printf '%s\n' "$raw" | tr -d '_, ' | tr -cd '0-9'
 }
 
+extract_track_run_id_from_query() {
+  local query_raw="$1"
+  local run_id=""
+  run_id="$(printf '%s\n' "$query_raw" | grep -Eo '[0-9]{8}T[0-9]{6}Z' | head -n 1 || true)"
+  printf '%s\n' "$run_id"
+}
+
+extract_track_output_root_from_query() {
+  local query_raw="$1"
+  local root=""
+  root="$(printf '%s\n' "$query_raw" | grep -Eio 'case-study-playbooks/track_prediction/[0-9]{8}T[0-9]{6}Z' | head -n 1 || true)"
+  root="$(printf '%s\n' "$root" | sed -E "s/^[\"'()]+//; s/[\"'(),;:。；，]+$//")"
+  printf '%s\n' "$root"
+}
+
+extract_track_explicit_skills_from_query() {
+  local query_lc="$1"
+  local out=""
+  if contains_token "$query_lc" "alphagenome"; then
+    out="$(append_csv "$out" "alphagenome-api")"
+  fi
+  if contains_token "$query_lc" "ntv3" || contains_token "$query_lc" "nucleotide-transformer-v3"; then
+    out="$(append_csv "$out" "nucleotide-transformer-v3")"
+  fi
+  if contains_token "$query_lc" "borzoi"; then
+    out="$(append_csv "$out" "borzoi-workflows")"
+  fi
+  if contains_token "$query_lc" "segmentnt" || contains_token "$query_lc" "segment-nt"; then
+    out="$(append_csv "$out" "segment-nt")"
+  fi
+  printf '%s\n' "$out"
+}
+
 extract_ntv3_species_from_query() {
   local query_lc="$1"
   if contains_token "$query_lc" "human"; then
@@ -456,7 +489,13 @@ extract_ntv3_bed_path_from_query() {
 extract_ntv3_output_dir_from_query() {
   local query_raw="$1"
   local out=""
-  out="$(printf '%s\n' "$query_raw" | grep -Eio 'case-study/[A-Za-z0-9._/-]*ntv3_results[A-Za-z0-9._/-]*' | head -n 1 || true)"
+  out="$(printf '%s\n' "$query_raw" | grep -Eio 'case-study-playbooks/track_prediction/[0-9]{8}T[0-9]{6}Z/ntv3_results' | head -n 1 || true)"
+  if [[ -z "$out" ]]; then
+    out="$(printf '%s\n' "$query_raw" | grep -Eio 'case-study-playbooks/[A-Za-z0-9._/-]*ntv3_results[A-Za-z0-9._/-]*' | head -n 1 || true)"
+  fi
+  if [[ -z "$out" ]]; then
+    out="$(printf '%s\n' "$query_raw" | grep -Eio 'case-study/[A-Za-z0-9._/-]*ntv3_results[A-Za-z0-9._/-]*' | head -n 1 || true)"
+  fi
   if [[ -z "$out" ]]; then
     out="$(printf '%s\n' "$query_raw" | grep -Eio 'output/[A-Za-z0-9._/-]*ntv3_results[A-Za-z0-9._/-]*' | head -n 1 || true)"
   fi
@@ -465,13 +504,7 @@ extract_ntv3_output_dir_from_query() {
   fi
   out="$(printf '%s\n' "$out" | sed -E "s/^[\"'()]+//; s/[\"'(),;:。；，]+$//")"
   out="${out%/.}"
-  if [[ -z "$out" ]]; then
-    out="output/ntv3_results"
-  fi
   out="${out%/}"
-  if [[ -z "$out" ]]; then
-    out="output/ntv3_results"
-  fi
   printf '%s\n' "$out"
 }
 
@@ -493,7 +526,10 @@ extract_alphagenome_track_bed_path_from_query() {
 extract_alphagenome_track_output_dir_from_query() {
   local query_raw="$1"
   local out=""
-  out="$(printf '%s\n' "$query_raw" | grep -Eio 'case-study-playbooks/[A-Za-z0-9._/-]*alphagenome_results[A-Za-z0-9._/-]*' | head -n 1 || true)"
+  out="$(printf '%s\n' "$query_raw" | grep -Eio 'case-study-playbooks/track_prediction/[0-9]{8}T[0-9]{6}Z/alphagenome_results' | head -n 1 || true)"
+  if [[ -z "$out" ]]; then
+    out="$(printf '%s\n' "$query_raw" | grep -Eio 'case-study-playbooks/[A-Za-z0-9._/-]*alphagenome_results[A-Za-z0-9._/-]*' | head -n 1 || true)"
+  fi
   if [[ -z "$out" ]]; then
     out="$(printf '%s\n' "$query_raw" | grep -Eio 'output/[A-Za-z0-9._/-]*alphagenome[A-Za-z0-9._/-]*' | head -n 1 || true)"
   fi
@@ -502,14 +538,204 @@ extract_alphagenome_track_output_dir_from_query() {
   fi
   out="$(printf '%s\n' "$out" | sed -E "s/^[\"'()]+//; s/[\"'(),;:。；，]+$//")"
   out="${out%/.}"
-  if [[ -z "$out" ]]; then
-    out="output/alphagenome_track"
-  fi
   out="${out%/}"
-  if [[ -z "$out" ]]; then
-    out="output/alphagenome_track"
-  fi
   printf '%s\n' "$out"
+}
+
+extract_borzoi_track_output_dir_from_query() {
+  local query_raw="$1"
+  local out=""
+  out="$(printf '%s\n' "$query_raw" | grep -Eio 'case-study-playbooks/track_prediction/[0-9]{8}T[0-9]{6}Z/borzoi_results' | head -n 1 || true)"
+  if [[ -z "$out" ]]; then
+    out="$(printf '%s\n' "$query_raw" | grep -Eio 'case-study-playbooks/[A-Za-z0-9._/-]*borzoi_results[A-Za-z0-9._/-]*' | head -n 1 || true)"
+  fi
+  if [[ -z "$out" ]]; then
+    out="$(printf '%s\n' "$query_raw" | grep -Eio 'case-study/[A-Za-z0-9._/-]*borzoi_results[A-Za-z0-9._/-]*' | head -n 1 || true)"
+  fi
+  if [[ -z "$out" ]]; then
+    out="$(printf '%s\n' "$query_raw" | grep -Eio 'output/[A-Za-z0-9._/-]*borzoi[A-Za-z0-9._/-]*' | head -n 1 || true)"
+  fi
+  if [[ -z "$out" ]]; then
+    out="$(printf '%s\n' "$query_raw" | grep -Eio '[A-Za-z0-9._/-]*borzoi_results[A-Za-z0-9._/-]*' | head -n 1 || true)"
+  fi
+  out="$(printf '%s\n' "$out" | sed -E "s/^[\"'()]+//; s/[\"'(),;:。；，]+$//")"
+  out="${out%/.}"
+  out="${out%/}"
+  printf '%s\n' "$out"
+}
+
+extract_segmentnt_track_output_dir_from_query() {
+  local query_raw="$1"
+  local out=""
+  out="$(printf '%s\n' "$query_raw" | grep -Eio 'case-study-playbooks/track_prediction/[0-9]{8}T[0-9]{6}Z/segmentnt_results' | head -n 1 || true)"
+  if [[ -z "$out" ]]; then
+    out="$(printf '%s\n' "$query_raw" | grep -Eio 'case-study-playbooks/[A-Za-z0-9._/-]*segmentnt_results[A-Za-z0-9._/-]*' | head -n 1 || true)"
+  fi
+  if [[ -z "$out" ]]; then
+    out="$(printf '%s\n' "$query_raw" | grep -Eio 'output/[A-Za-z0-9._/-]*segmentnt[A-Za-z0-9._/-]*' | head -n 1 || true)"
+  fi
+  if [[ -z "$out" ]]; then
+    out="$(printf '%s\n' "$query_raw" | grep -Eio '[A-Za-z0-9._/-]*segmentnt_results[A-Za-z0-9._/-]*' | head -n 1 || true)"
+  fi
+  out="$(printf '%s\n' "$out" | sed -E "s/^[\"'()]+//; s/[\"'(),;:。；，]+$//")"
+  out="${out%/.}"
+  out="${out%/}"
+  printf '%s\n' "$out"
+}
+
+csv_count() {
+  local csv="${1:-}"
+  local count=0
+  local item=""
+  if [[ -z "$csv" ]]; then
+    printf '0\n'
+    return 0
+  fi
+  while IFS= read -r item; do
+    [[ -z "$item" ]] && continue
+    count=$((count + 1))
+  done < <(printf '%s\n' "$csv" | tr ',' '\n')
+  printf '%s\n' "$count"
+}
+
+track_query_mentions_all_skills() {
+  local query_lc="$1"
+  contains_token "$query_lc" "all skills" || \
+    contains_token "$query_lc" "all four" || \
+    contains_token "$query_lc" "four skills" || \
+    contains_token "$query_lc" "四技能" || \
+    contains_token "$query_lc" "四个技能" || \
+    contains_token "$query_lc" "四种技能" || \
+    contains_token "$query_lc" "全部技能"
+}
+
+track_skill_case_token() {
+  local skill="$1"
+  case "$skill" in
+    alphagenome-api) printf 'alphagenome\n' ;;
+    nucleotide-transformer-v3) printf 'ntv3\n' ;;
+    borzoi-workflows) printf 'borzoi\n' ;;
+    segment-nt) printf 'segmentnt\n' ;;
+    *)
+      printf '\n'
+      ;;
+  esac
+}
+
+track_skill_output_subdir() {
+  local skill="$1"
+  case "$skill" in
+    alphagenome-api) printf 'alphagenome_results\n' ;;
+    nucleotide-transformer-v3) printf 'ntv3_results\n' ;;
+    borzoi-workflows) printf 'borzoi_results\n' ;;
+    segment-nt) printf 'segmentnt_results\n' ;;
+    *)
+      printf '\n'
+      ;;
+  esac
+}
+
+track_skill_summary_file() {
+  local skill="$1"
+  case "$skill" in
+    alphagenome-api) printf 'alphagenome_track_bed_batch_summary.json\n' ;;
+    nucleotide-transformer-v3) printf 'ntv3_bed_batch_summary.json\n' ;;
+    borzoi-workflows) printf 'borzoi_bed_batch_summary.json\n' ;;
+    segment-nt) printf 'segmentnt_bed_batch_summary.json\n' ;;
+    *)
+      printf '\n'
+      ;;
+  esac
+}
+
+compute_track_run_id() {
+  local query_raw="$1"
+  local run_id=""
+  run_id="$(extract_track_run_id_from_query "$query_raw")"
+  if [[ -z "$run_id" ]]; then
+    run_id="$(date -u +%Y%m%dT%H%M%SZ)"
+  fi
+  printf '%s\n' "$run_id"
+}
+
+compute_track_output_root() {
+  local query_raw="$1"
+  local run_id="$2"
+  local out=""
+  out="$(extract_track_output_root_from_query "$query_raw")"
+  if [[ -z "$out" ]]; then
+    out="case-study-playbooks/track_prediction/${run_id}"
+  fi
+  out="${out%/.}"
+  out="${out%/}"
+  printf '%s\n' "$out"
+}
+
+default_track_output_dir_for_skill() {
+  local output_root="$1"
+  local skill="$2"
+  local subdir=""
+  subdir="$(track_skill_output_subdir "$skill")"
+  if [[ -z "$subdir" ]]; then
+    printf '%s\n' "$output_root"
+    return 0
+  fi
+  printf '%s/%s\n' "$output_root" "$subdir"
+}
+
+resolve_abs_path_text() {
+  local raw="$1"
+  python3 - "$raw" <<'PY'
+import pathlib
+import sys
+print(pathlib.Path(sys.argv[1]).expanduser().resolve())
+PY
+}
+
+resolve_track_bed_path() {
+  local bed_path="${1:-}"
+  local resolved=""
+  local source=""
+  local error_msg=""
+  local repo_candidate=""
+  local fallback_candidate=""
+  local fallback_base_candidate=""
+
+  if [[ -z "$bed_path" ]]; then
+    printf '||\n'
+    return 0
+  fi
+
+  if [[ "$bed_path" == /* ]]; then
+    if [[ -f "$bed_path" ]]; then
+      resolved="$bed_path"
+      source="absolute-path"
+    else
+      error_msg="bed-path-not-found:absolute:${bed_path}"
+    fi
+  else
+    repo_candidate="$REPO_ROOT/$bed_path"
+    fallback_candidate="$REPO_ROOT/case-study-playbooks/track_prediction/bed/$bed_path"
+    fallback_base_candidate="$REPO_ROOT/case-study-playbooks/track_prediction/bed/$(basename "$bed_path")"
+    if [[ -f "$repo_candidate" ]]; then
+      resolved="$repo_candidate"
+      source="repo-root-relative"
+    elif [[ -f "$fallback_candidate" ]]; then
+      resolved="$fallback_candidate"
+      source="track-bed-fallback"
+    elif [[ -f "$fallback_base_candidate" ]]; then
+      resolved="$fallback_base_candidate"
+      source="track-bed-fallback-basename"
+    else
+      error_msg="bed-path-not-found:raw=${bed_path};checked=${repo_candidate}|${fallback_candidate}|${fallback_base_candidate}"
+    fi
+  fi
+
+  if [[ -n "$resolved" ]]; then
+    resolved="$(resolve_abs_path_text "$resolved")"
+  fi
+
+  printf '%s|%s|%s\n' "$resolved" "$source" "$error_msg"
 }
 
 extract_alphagenome_track_head_from_query() {
@@ -1170,6 +1396,29 @@ if [[ -z "$plan_retry_policy" ]]; then
 fi
 
 query_lc="$(to_lower "$query")"
+track_run_id=""
+track_output_root=""
+track_explicit_skills_csv=""
+track_explicit_skill_count=0
+track_bed_query_path=""
+track_bed_resolved=""
+track_bed_source=""
+track_bed_error=""
+
+if [[ "$effective_task" == "track-prediction" ]]; then
+  track_run_id="$(compute_track_run_id "$query")"
+  track_output_root="$(compute_track_output_root "$query" "$track_run_id")"
+  track_explicit_skills_csv="$(extract_track_explicit_skills_from_query "$query_lc")"
+  if track_query_mentions_all_skills "$query_lc"; then
+    track_explicit_skills_csv="alphagenome-api,nucleotide-transformer-v3,borzoi-workflows,segment-nt"
+  fi
+  track_explicit_skill_count="$(csv_count "$track_explicit_skills_csv")"
+  track_bed_query_path="$(extract_ntv3_bed_path_from_query "$query")"
+  if [[ -n "$track_bed_query_path" ]]; then
+    IFS='|' read -r track_bed_resolved track_bed_source track_bed_error < <(resolve_track_bed_path "$track_bed_query_path")
+  fi
+fi
+
 provided_csv=""
 missing_csv=""
 provided_canonical_csv=""
@@ -1211,8 +1460,8 @@ fi
 if [[ "$effective_task" == "track-prediction" && "$primary_skill" == "nucleotide-transformer-v3" ]]; then
   ntv3_missing_non_head="$(remove_csv_item "$missing_csv" "output-head")"
   ntv3_interval_csv="$(extract_ntv3_interval_from_query "$query_lc")"
-  ntv3_bed_path="$(extract_ntv3_bed_path_from_query "$query")"
-  ntv3_bed_resolved=""
+  ntv3_bed_path="$track_bed_query_path"
+  ntv3_bed_resolved="$track_bed_resolved"
   ntv3_species="$(extract_ntv3_species_from_query "$query_lc")"
   ntv3_assembly="$(extract_ntv3_assembly_from_query "$query_lc")"
   ntv3_output_dir="$(extract_ntv3_output_dir_from_query "$query")"
@@ -1229,31 +1478,45 @@ if [[ "$effective_task" == "track-prediction" && "$primary_skill" == "nucleotide
   ntv3_step_cmd=""
   ntv3_fallback_cmd=""
 
+  if [[ -z "$ntv3_output_dir" ]]; then
+    ntv3_output_dir="$(default_track_output_dir_for_skill "$track_output_root" "nucleotide-transformer-v3")"
+  fi
+
   if [[ -n "$ntv3_bed_path" ]]; then
-    ntv3_bed_resolved="$ntv3_bed_path"
-    if [[ ! -f "$ntv3_bed_resolved" && -f "$REPO_ROOT/$ntv3_bed_resolved" ]]; then
-      ntv3_bed_resolved="$REPO_ROOT/$ntv3_bed_resolved"
+    if [[ -n "$ntv3_bed_resolved" ]]; then
+      if in_csv_list "sequence-or-interval" "$missing_csv"; then
+        missing_csv="$(remove_csv_item "$missing_csv" "sequence-or-interval")"
+        provided_csv="$(append_csv "$provided_csv" "sequence-or-interval")"
+        plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "sequence-or-interval-inferred-from-bed-path")"
+      fi
+      if in_csv_list "sequence-or-interval" "$missing_canonical_csv"; then
+        missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "sequence-or-interval")"
+        provided_canonical_csv="$(append_csv "$provided_canonical_csv" "sequence-or-interval")"
+      fi
+      plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "bed-path-resolution:${track_bed_source}")"
+      ntv3_missing_non_head="$(remove_csv_item "$missing_csv" "output-head")"
+    else
+      plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "${track_bed_error}")"
     fi
+  fi
+
+  if [[ -n "$ntv3_interval_csv" ]]; then
+    IFS=',' read -r ntv3_chrom ntv3_start ntv3_end <<<"$ntv3_interval_csv"
     if in_csv_list "sequence-or-interval" "$missing_csv"; then
       missing_csv="$(remove_csv_item "$missing_csv" "sequence-or-interval")"
       provided_csv="$(append_csv "$provided_csv" "sequence-or-interval")"
-      plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "sequence-or-interval-inferred-from-bed-path")"
+      plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "sequence-or-interval-inferred-from-interval-token")"
     fi
     if in_csv_list "sequence-or-interval" "$missing_canonical_csv"; then
       missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "sequence-or-interval")"
       provided_canonical_csv="$(append_csv "$provided_canonical_csv" "sequence-or-interval")"
     fi
-    ntv3_missing_non_head="$(remove_csv_item "$missing_csv" "output-head")"
   fi
 
-  if [[ -n "$ntv3_interval_csv" ]]; then
-    IFS=',' read -r ntv3_chrom ntv3_start ntv3_end <<<"$ntv3_interval_csv"
-  fi
-
-  if [[ -n "$ntv3_species" && -n "$ntv3_assembly" && -n "$ntv3_bed_path" && -z "$ntv3_missing_non_head" ]]; then
+  if [[ -n "$ntv3_species" && -n "$ntv3_assembly" && -n "$ntv3_bed_resolved" && -z "$ntv3_missing_non_head" ]]; then
     ntv3_batch_summary_path="${ntv3_output_dir}/ntv3_bed_batch_summary.json"
     ntv3_batch_log_path="${ntv3_output_dir}/ntv3_bed_batch.log"
-    ntv3_step_cmd="set -a; source .env; set +a; mkdir -p ${ntv3_output_dir}; conda run -n ntv3 python skills/nucleotide-transformer-v3/scripts/run_track_prediction_bed_batch.py --bed ${ntv3_bed_resolved} --model ${ntv3_model} --species ${ntv3_species} --assembly ${ntv3_assembly} --output-dir ${ntv3_output_dir} 2>&1 | tee ${ntv3_batch_log_path}"
+    ntv3_step_cmd="TRACK_PREDICTION_RUN_ID=${track_run_id} NTV3_TRACK_BED_PATH=${ntv3_bed_resolved} NTV3_TRACK_OUTPUT_DIR=${ntv3_output_dir} NTV3_SPECIES=${ntv3_species} NTV3_ASSEMBLY=${ntv3_assembly} bash case-study-playbooks/track_prediction/run_ntv3_track_case.sh"
 
     plan_steps_csv="$ntv3_step_cmd"
     plan_expected_outputs_csv=""
@@ -1295,8 +1558,8 @@ if [[ "$effective_task" == "track-prediction" && "$primary_skill" == "alphagenom
   ag_track_missing_non_head="$(remove_csv_item "$missing_csv" "output-head")"
   ag_track_missing_non_head="$(remove_csv_item "$ag_track_missing_non_head" "species")"
   ag_track_interval_csv="$(extract_alphagenome_track_interval_from_query "$query_lc")"
-  ag_track_bed_path="$(extract_alphagenome_track_bed_path_from_query "$query")"
-  ag_track_bed_resolved=""
+  ag_track_bed_path="$track_bed_query_path"
+  ag_track_bed_resolved="$track_bed_resolved"
   ag_track_species="$(extract_alphagenome_track_species_from_query "$query_lc")"
   ag_track_assembly="$(extract_alphagenome_assembly_from_query "$query_lc")"
   ag_track_head="$(extract_alphagenome_track_head_from_query "$query_lc")"
@@ -1313,6 +1576,10 @@ if [[ "$effective_task" == "track-prediction" && "$primary_skill" == "alphagenom
   ag_track_step_cmd=""
   ag_track_fallback_cmd=""
   ag_track_prefix="alphagenome_track"
+
+  if [[ -z "$ag_track_output_dir" ]]; then
+    ag_track_output_dir="$(default_track_output_dir_for_skill "$track_output_root" "alphagenome-api")"
+  fi
 
   if [[ -z "$ag_track_species" ]]; then
     ag_track_species="human"
@@ -1346,18 +1613,19 @@ if [[ "$effective_task" == "track-prediction" && "$primary_skill" == "alphagenom
   fi
 
   if [[ -n "$ag_track_bed_path" ]]; then
-    ag_track_bed_resolved="$ag_track_bed_path"
-    if [[ ! -f "$ag_track_bed_resolved" && -f "$REPO_ROOT/$ag_track_bed_resolved" ]]; then
-      ag_track_bed_resolved="$REPO_ROOT/$ag_track_bed_resolved"
-    fi
-    if in_csv_list "sequence-or-interval" "$missing_csv"; then
-      missing_csv="$(remove_csv_item "$missing_csv" "sequence-or-interval")"
-      provided_csv="$(append_csv "$provided_csv" "sequence-or-interval")"
-      plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "sequence-or-interval-inferred-from-bed-path")"
-    fi
-    if in_csv_list "sequence-or-interval" "$missing_canonical_csv"; then
-      missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "sequence-or-interval")"
-      provided_canonical_csv="$(append_csv "$provided_canonical_csv" "sequence-or-interval")"
+    if [[ -n "$ag_track_bed_resolved" ]]; then
+      if in_csv_list "sequence-or-interval" "$missing_csv"; then
+        missing_csv="$(remove_csv_item "$missing_csv" "sequence-or-interval")"
+        provided_csv="$(append_csv "$provided_csv" "sequence-or-interval")"
+        plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "sequence-or-interval-inferred-from-bed-path")"
+      fi
+      if in_csv_list "sequence-or-interval" "$missing_canonical_csv"; then
+        missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "sequence-or-interval")"
+        provided_canonical_csv="$(append_csv "$provided_canonical_csv" "sequence-or-interval")"
+      fi
+      plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "bed-path-resolution:${track_bed_source}")"
+    else
+      plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "${track_bed_error}")"
     fi
   elif [[ -n "$ag_track_interval_csv" ]]; then
     IFS=',' read -r ag_track_chrom ag_track_start ag_track_end <<<"$ag_track_interval_csv"
@@ -1390,7 +1658,7 @@ if [[ "$effective_task" == "track-prediction" && "$primary_skill" == "alphagenom
   ag_track_log_path="${ag_track_output_dir}/alphagenome_track_prediction.log"
   ag_track_summary_path="${ag_track_output_dir}/${ag_track_prefix}_bed_batch_summary.json"
 
-  if [[ -n "$ag_track_assembly" && -n "$ag_track_bed_path" && -z "$ag_track_missing_non_head" ]]; then
+  if [[ -n "$ag_track_assembly" && -n "$ag_track_bed_resolved" && -z "$ag_track_missing_non_head" ]]; then
     ag_track_step_cmd="set -a; source .env; set +a; mkdir -p ${ag_track_output_dir}; ${ag_conda_cmd} python skills/alphagenome-api/scripts/run_alphagenome_track_prediction_bed_batch.py --bed ${ag_track_bed_resolved} --species ${ag_track_species} --assembly ${ag_track_assembly} --output-head ${ag_track_head} --ontology-term ${ag_track_ontology} --output-dir ${ag_track_output_dir} --output-prefix ${ag_track_prefix} 2>&1 | tee ${ag_track_log_path}"
     ag_track_fallback_cmd="set -a; source .env; set +a; mkdir -p ${ag_track_output_dir}; grpc_proxy=http://127.0.0.1:7890 http_proxy=http://127.0.0.1:7890 https_proxy=http://127.0.0.1:7890 ${ag_conda_cmd} python skills/alphagenome-api/scripts/run_alphagenome_track_prediction_bed_batch.py --bed ${ag_track_bed_resolved} --species ${ag_track_species} --assembly ${ag_track_assembly} --output-head ${ag_track_head} --ontology-term ${ag_track_ontology} --output-dir ${ag_track_output_dir} --output-prefix ${ag_track_prefix} --request-timeout-sec 120 2>&1 | tee ${ag_track_log_path}"
 
@@ -1424,6 +1692,314 @@ if [[ "$effective_task" == "track-prediction" && "$primary_skill" == "alphagenom
       plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "track-interval-coordinate-convention-0based-half-open")"
       plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "inference-window-auto-expanded-to-supported-width")"
     fi
+  fi
+fi
+
+if [[ "$effective_task" == "track-prediction" && "$primary_skill" == "borzoi-workflows" ]]; then
+  bz_missing_non_head="$(remove_csv_item "$missing_csv" "output-head")"
+  bz_interval_csv="$(extract_ntv3_interval_from_query "$query_lc")"
+  bz_bed_path="$track_bed_query_path"
+  bz_bed_resolved="$track_bed_resolved"
+  bz_species="$(extract_ntv3_species_from_query "$query_lc")"
+  bz_assembly="$(extract_ntv3_assembly_from_query "$query_lc")"
+  bz_output_dir="$(extract_borzoi_track_output_dir_from_query "$query")"
+  bz_step_cmd=""
+  bz_summary_path=""
+  bz_run_bed=""
+  bz_prepare_cmd=""
+  bz_chrom=""
+  bz_start=""
+  bz_end=""
+
+  if [[ -z "$bz_output_dir" ]]; then
+    bz_output_dir="$(default_track_output_dir_for_skill "$track_output_root" "borzoi-workflows")"
+  fi
+
+  if [[ -z "$bz_species" ]]; then
+    bz_species="human"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "default-species:human")"
+  fi
+  if in_csv_list "species" "$missing_csv"; then
+    missing_csv="$(remove_csv_item "$missing_csv" "species")"
+    provided_csv="$(append_csv "$provided_csv" "species")"
+  fi
+  if in_csv_list "species" "$missing_canonical_csv"; then
+    missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "species")"
+    provided_canonical_csv="$(append_csv "$provided_canonical_csv" "species")"
+  fi
+
+  if [[ -n "$bz_bed_path" ]]; then
+    if [[ -n "$bz_bed_resolved" ]]; then
+      bz_run_bed="$bz_bed_resolved"
+      if in_csv_list "sequence-or-interval" "$missing_csv"; then
+        missing_csv="$(remove_csv_item "$missing_csv" "sequence-or-interval")"
+        provided_csv="$(append_csv "$provided_csv" "sequence-or-interval")"
+        plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "sequence-or-interval-inferred-from-bed-path")"
+      fi
+      if in_csv_list "sequence-or-interval" "$missing_canonical_csv"; then
+        missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "sequence-or-interval")"
+        provided_canonical_csv="$(append_csv "$provided_canonical_csv" "sequence-or-interval")"
+      fi
+      plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "bed-path-resolution:${track_bed_source}")"
+    else
+      plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "${track_bed_error}")"
+    fi
+  elif [[ -n "$bz_interval_csv" ]]; then
+    IFS=',' read -r bz_chrom bz_start bz_end <<<"$bz_interval_csv"
+    if [[ -n "$bz_chrom" && -n "$bz_start" && -n "$bz_end" ]]; then
+      if in_csv_list "sequence-or-interval" "$missing_csv"; then
+        missing_csv="$(remove_csv_item "$missing_csv" "sequence-or-interval")"
+        provided_csv="$(append_csv "$provided_csv" "sequence-or-interval")"
+        plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "sequence-or-interval-inferred-from-interval-token")"
+      fi
+      if in_csv_list "sequence-or-interval" "$missing_canonical_csv"; then
+        missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "sequence-or-interval")"
+        provided_canonical_csv="$(append_csv "$provided_canonical_csv" "sequence-or-interval")"
+      fi
+      bz_run_bed="${track_output_root}/borzoi_single_interval.bed"
+      bz_prepare_cmd="mkdir -p ${track_output_root}; printf '%s\t%s\t%s\n' ${bz_chrom} ${bz_start} ${bz_end} > ${bz_run_bed}; "
+    fi
+  fi
+
+  bz_missing_non_head="$(remove_csv_item "$bz_missing_non_head" "species")"
+  if [[ -n "$bz_assembly" && -n "$bz_run_bed" && -z "$bz_missing_non_head" ]]; then
+    bz_summary_path="${bz_output_dir}/borzoi_bed_batch_summary.json"
+    bz_step_cmd="${bz_prepare_cmd}TRACK_PREDICTION_RUN_ID=${track_run_id} BORZOI_TRACK_BED_PATH=${bz_run_bed} BORZOI_TRACK_OUTPUT_DIR=${bz_output_dir} BORZOI_TRACK_ASSEMBLY=${bz_assembly} BORZOI_TRACK_CONTINUE_ON_ERROR=1 bash case-study-playbooks/track_prediction/run_borzoi_track_case.sh"
+
+    plan_steps_csv="$bz_step_cmd"
+    plan_expected_outputs_csv=""
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${bz_summary_path}")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-plot:${bz_output_dir}/borzoi_track_*_trackplot.png")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${bz_output_dir}/borzoi_track_*_result.json")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${bz_output_dir}/borzoi_track_*_track_prediction.npz")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${bz_output_dir}/borzoi_track_*_top_tracks.tsv")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${bz_output_dir}/borzoi_*.log")"
+
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "borzoi-track-bed-batch-fastpath-enabled")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "default-output-dir:${bz_output_dir}")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "per-interval-ucsc-network-retry-once")"
+  fi
+fi
+
+if [[ "$effective_task" == "track-prediction" && "$primary_skill" == "segment-nt" ]]; then
+  sg_missing_non_head="$(remove_csv_item "$missing_csv" "output-head")"
+  sg_interval_csv="$(extract_ntv3_interval_from_query "$query_lc")"
+  sg_bed_path="$track_bed_query_path"
+  sg_bed_resolved="$track_bed_resolved"
+  sg_species="$(extract_ntv3_species_from_query "$query_lc")"
+  sg_assembly="$(extract_ntv3_assembly_from_query "$query_lc")"
+  sg_output_dir="$(extract_segmentnt_track_output_dir_from_query "$query")"
+  sg_step_cmd=""
+  sg_summary_path=""
+  sg_run_bed=""
+  sg_prepare_cmd=""
+  sg_chrom=""
+  sg_start=""
+  sg_end=""
+
+  if [[ -z "$sg_output_dir" ]]; then
+    sg_output_dir="$(default_track_output_dir_for_skill "$track_output_root" "segment-nt")"
+  fi
+
+  if [[ -z "$sg_species" ]]; then
+    sg_species="human"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "default-species:human")"
+  fi
+  if in_csv_list "species" "$missing_csv"; then
+    missing_csv="$(remove_csv_item "$missing_csv" "species")"
+    provided_csv="$(append_csv "$provided_csv" "species")"
+  fi
+  if in_csv_list "species" "$missing_canonical_csv"; then
+    missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "species")"
+    provided_canonical_csv="$(append_csv "$provided_canonical_csv" "species")"
+  fi
+
+  if [[ -n "$sg_bed_path" ]]; then
+    if [[ -n "$sg_bed_resolved" ]]; then
+      sg_run_bed="$sg_bed_resolved"
+      if in_csv_list "sequence-or-interval" "$missing_csv"; then
+        missing_csv="$(remove_csv_item "$missing_csv" "sequence-or-interval")"
+        provided_csv="$(append_csv "$provided_csv" "sequence-or-interval")"
+        plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "sequence-or-interval-inferred-from-bed-path")"
+      fi
+      if in_csv_list "sequence-or-interval" "$missing_canonical_csv"; then
+        missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "sequence-or-interval")"
+        provided_canonical_csv="$(append_csv "$provided_canonical_csv" "sequence-or-interval")"
+      fi
+      plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "bed-path-resolution:${track_bed_source}")"
+    else
+      plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "${track_bed_error}")"
+    fi
+  elif [[ -n "$sg_interval_csv" ]]; then
+    IFS=',' read -r sg_chrom sg_start sg_end <<<"$sg_interval_csv"
+    if [[ -n "$sg_chrom" && -n "$sg_start" && -n "$sg_end" ]]; then
+      if in_csv_list "sequence-or-interval" "$missing_csv"; then
+        missing_csv="$(remove_csv_item "$missing_csv" "sequence-or-interval")"
+        provided_csv="$(append_csv "$provided_csv" "sequence-or-interval")"
+        plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "sequence-or-interval-inferred-from-interval-token")"
+      fi
+      if in_csv_list "sequence-or-interval" "$missing_canonical_csv"; then
+        missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "sequence-or-interval")"
+        provided_canonical_csv="$(append_csv "$provided_canonical_csv" "sequence-or-interval")"
+      fi
+      sg_run_bed="${track_output_root}/segmentnt_single_interval.bed"
+      sg_prepare_cmd="mkdir -p ${track_output_root}; printf '%s\t%s\t%s\n' ${sg_chrom} ${sg_start} ${sg_end} > ${sg_run_bed}; "
+    fi
+  fi
+
+  sg_missing_non_head="$(remove_csv_item "$sg_missing_non_head" "species")"
+  if [[ -n "$sg_assembly" && -n "$sg_run_bed" && -z "$sg_missing_non_head" ]]; then
+    sg_summary_path="${sg_output_dir}/segmentnt_bed_batch_summary.json"
+    sg_step_cmd="${sg_prepare_cmd}TRACK_PREDICTION_RUN_ID=${track_run_id} SEGMENT_NT_BED_PATH=${sg_run_bed} SEGMENT_NT_OUTPUT_DIR=${sg_output_dir} SEGMENT_NT_SPECIES=${sg_species} SEGMENT_NT_ASSEMBLY=${sg_assembly} SEGMENT_NT_CONTINUE_ON_ERROR=1 bash case-study-playbooks/track_prediction/run_segment_nt_track_case.sh"
+
+    plan_steps_csv="$sg_step_cmd"
+    plan_expected_outputs_csv=""
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${sg_summary_path}")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-plot:${sg_output_dir}/segmentnt_*_trackplot.png")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${sg_output_dir}/segmentnt_*_result.json")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${sg_output_dir}/segmentnt_*_probs.npz")"
+    plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${sg_output_dir}/segmentnt_*.log")"
+
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "segmentnt-track-bed-batch-fastpath-enabled")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "default-output-dir:${sg_output_dir}")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "segmentnt-length-normalization-32768-to-32764-when-needed")"
+  fi
+fi
+
+if [[ "$effective_task" == "track-prediction" && "$track_explicit_skill_count" -gt 1 ]]; then
+  multi_skills_csv="$track_explicit_skills_csv"
+  multi_missing_non_head="$(remove_csv_item "$missing_csv" "output-head")"
+  multi_species="$(extract_ntv3_species_from_query "$query_lc")"
+  multi_assembly="$(extract_ntv3_assembly_from_query "$query_lc")"
+  multi_interval_csv="$(extract_ntv3_interval_from_query "$query_lc")"
+  multi_bed_path="$track_bed_query_path"
+  multi_bed_resolved="$track_bed_resolved"
+  multi_run_bed=""
+  multi_prepare_cmd=""
+  multi_chrom=""
+  multi_start=""
+  multi_end=""
+  multi_ag_head="$(extract_alphagenome_track_head_from_query "$query_lc")"
+  multi_ag_ontology="$(extract_alphagenome_ontology_term_from_query "$query")"
+
+  if [[ -z "$multi_species" ]]; then
+    multi_species="human"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "default-species:human")"
+  fi
+  if in_csv_list "species" "$missing_csv"; then
+    missing_csv="$(remove_csv_item "$missing_csv" "species")"
+    provided_csv="$(append_csv "$provided_csv" "species")"
+  fi
+  if in_csv_list "species" "$missing_canonical_csv"; then
+    missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "species")"
+    provided_canonical_csv="$(append_csv "$provided_canonical_csv" "species")"
+  fi
+  multi_missing_non_head="$(remove_csv_item "$multi_missing_non_head" "species")"
+
+  if [[ -z "$multi_ag_head" ]]; then
+    multi_ag_head="RNA_SEQ"
+  fi
+  if [[ -z "$multi_ag_ontology" ]]; then
+    multi_ag_ontology="UBERON:0001157"
+  fi
+
+  if [[ -n "$multi_bed_path" ]]; then
+    if [[ -n "$multi_bed_resolved" ]]; then
+      multi_run_bed="$multi_bed_resolved"
+      if in_csv_list "sequence-or-interval" "$missing_csv"; then
+        missing_csv="$(remove_csv_item "$missing_csv" "sequence-or-interval")"
+        provided_csv="$(append_csv "$provided_csv" "sequence-or-interval")"
+      fi
+      if in_csv_list "sequence-or-interval" "$missing_canonical_csv"; then
+        missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "sequence-or-interval")"
+        provided_canonical_csv="$(append_csv "$provided_canonical_csv" "sequence-or-interval")"
+      fi
+      plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "bed-path-resolution:${track_bed_source}")"
+    else
+      plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "${track_bed_error}")"
+    fi
+  elif [[ -n "$multi_interval_csv" ]]; then
+    IFS=',' read -r multi_chrom multi_start multi_end <<<"$multi_interval_csv"
+    if [[ -n "$multi_chrom" && -n "$multi_start" && -n "$multi_end" ]]; then
+      multi_run_bed="${track_output_root}/track_prediction_multi_interval.bed"
+      multi_prepare_cmd="mkdir -p ${track_output_root}; printf '%s\t%s\t%s\n' ${multi_chrom} ${multi_start} ${multi_end} > ${multi_run_bed}; "
+      if in_csv_list "sequence-or-interval" "$missing_csv"; then
+        missing_csv="$(remove_csv_item "$missing_csv" "sequence-or-interval")"
+        provided_csv="$(append_csv "$provided_csv" "sequence-or-interval")"
+      fi
+      if in_csv_list "sequence-or-interval" "$missing_canonical_csv"; then
+        missing_canonical_csv="$(remove_csv_item "$missing_canonical_csv" "sequence-or-interval")"
+        provided_canonical_csv="$(append_csv "$provided_canonical_csv" "sequence-or-interval")"
+      fi
+    fi
+  fi
+
+  if [[ -n "$multi_run_bed" && -n "$multi_assembly" && -z "$multi_missing_non_head" ]]; then
+    plan_steps_csv=""
+    plan_expected_outputs_csv=""
+    multi_ordered_skills=(alphagenome-api nucleotide-transformer-v3 borzoi-workflows segment-nt)
+    for multi_skill in "${multi_ordered_skills[@]}"; do
+      if ! in_csv_list "$multi_skill" "$multi_skills_csv"; then
+        continue
+      fi
+
+      multi_output_dir=""
+      multi_step=""
+      multi_summary_file="$(track_skill_summary_file "$multi_skill")"
+      case "$multi_skill" in
+        alphagenome-api)
+          multi_output_dir="$(extract_alphagenome_track_output_dir_from_query "$query")"
+          [[ -z "$multi_output_dir" ]] && multi_output_dir="$(default_track_output_dir_for_skill "$track_output_root" "$multi_skill")"
+          multi_step="TRACK_PREDICTION_RUN_ID=${track_run_id} ALPHAGENOME_TRACK_BED_PATH=${multi_run_bed} ALPHAGENOME_TRACK_OUTPUT_DIR=${multi_output_dir} ALPHAGENOME_TRACK_ASSEMBLY=${multi_assembly} ALPHAGENOME_TRACK_OUTPUT_HEAD=${multi_ag_head} ALPHAGENOME_TRACK_ONTOLOGY_TERM=${multi_ag_ontology} bash case-study-playbooks/track_prediction/run_alphagenome_track_case.sh"
+          plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${multi_output_dir}/${multi_summary_file}")"
+          plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-plot:${multi_output_dir}/alphagenome_track_*_trackplot.png")"
+          plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${multi_output_dir}/alphagenome_track_*_result.json")"
+          plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${multi_output_dir}/alphagenome_track_*_track_prediction.npz")"
+          ;;
+        nucleotide-transformer-v3)
+          multi_output_dir="$(extract_ntv3_output_dir_from_query "$query")"
+          [[ -z "$multi_output_dir" ]] && multi_output_dir="$(default_track_output_dir_for_skill "$track_output_root" "$multi_skill")"
+          multi_step="TRACK_PREDICTION_RUN_ID=${track_run_id} NTV3_TRACK_BED_PATH=${multi_run_bed} NTV3_TRACK_OUTPUT_DIR=${multi_output_dir} NTV3_SPECIES=${multi_species} NTV3_ASSEMBLY=${multi_assembly} bash case-study-playbooks/track_prediction/run_ntv3_track_case.sh"
+          plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${multi_output_dir}/${multi_summary_file}")"
+          plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-plot:${multi_output_dir}/ntv3_*_trackplot.png")"
+          plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${multi_output_dir}/ntv3_*_result.json")"
+          plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${multi_output_dir}/ntv3_*.log")"
+          ;;
+        borzoi-workflows)
+          multi_output_dir="$(extract_borzoi_track_output_dir_from_query "$query")"
+          [[ -z "$multi_output_dir" ]] && multi_output_dir="$(default_track_output_dir_for_skill "$track_output_root" "$multi_skill")"
+          multi_step="TRACK_PREDICTION_RUN_ID=${track_run_id} BORZOI_TRACK_BED_PATH=${multi_run_bed} BORZOI_TRACK_OUTPUT_DIR=${multi_output_dir} BORZOI_TRACK_ASSEMBLY=${multi_assembly} BORZOI_TRACK_CONTINUE_ON_ERROR=1 bash case-study-playbooks/track_prediction/run_borzoi_track_case.sh"
+          plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${multi_output_dir}/${multi_summary_file}")"
+          plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-plot:${multi_output_dir}/borzoi_track_*_trackplot.png")"
+          plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${multi_output_dir}/borzoi_track_*_result.json")"
+          plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${multi_output_dir}/borzoi_track_*_track_prediction.npz")"
+          plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${multi_output_dir}/borzoi_track_*_top_tracks.tsv")"
+          plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${multi_output_dir}/borzoi_*.log")"
+          ;;
+        segment-nt)
+          multi_output_dir="$(extract_segmentnt_track_output_dir_from_query "$query")"
+          [[ -z "$multi_output_dir" ]] && multi_output_dir="$(default_track_output_dir_for_skill "$track_output_root" "$multi_skill")"
+          multi_step="TRACK_PREDICTION_RUN_ID=${track_run_id} SEGMENT_NT_BED_PATH=${multi_run_bed} SEGMENT_NT_OUTPUT_DIR=${multi_output_dir} SEGMENT_NT_SPECIES=${multi_species} SEGMENT_NT_ASSEMBLY=${multi_assembly} SEGMENT_NT_CONTINUE_ON_ERROR=1 bash case-study-playbooks/track_prediction/run_segment_nt_track_case.sh"
+          plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${multi_output_dir}/${multi_summary_file}")"
+          plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-plot:${multi_output_dir}/segmentnt_*_trackplot.png")"
+          plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${multi_output_dir}/segmentnt_*_result.json")"
+          plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${multi_output_dir}/segmentnt_*_probs.npz")"
+          plan_expected_outputs_csv="$(append_csv "$plan_expected_outputs_csv" "expected-file:${multi_output_dir}/segmentnt_*.log")"
+          ;;
+      esac
+
+      if [[ -n "$multi_prepare_cmd" ]]; then
+        multi_step="${multi_prepare_cmd}${multi_step}"
+        multi_prepare_cmd=""
+      fi
+      plan_steps_csv="$(append_csv "$plan_steps_csv" "$multi_step")"
+    done
+
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "track-multi-skill-composite-plan-enabled")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "track-run-id:${track_run_id}")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "track-output-root:${track_output_root}")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "selected-track-skills:${multi_skills_csv}")"
+    plan_assumptions_csv="$(append_csv "$plan_assumptions_csv" "batch-summary-plus-per-interval-artifacts-contract")"
   fi
 fi
 

@@ -111,9 +111,9 @@ run_case "A1" \
   "" ""
 
 run_case "A2" \
-  "Use \$nucleotide-transformer-v3 to run track prediction for human hg38 chr19:6700000-6732768, save trackplot to output/ntv3_results/." \
+  "Use \$nucleotide-transformer-v3 to run track prediction BED batch for human hg38 on case-study-playbooks/track_prediction/bed/Test.interval.bed with run_id 20260416T120000Z." \
   "track-prediction" "route" \
-  "run_track_prediction.py" "output/ntv3_results"
+  "run_ntv3_track_case.sh" "case-study-playbooks/track_prediction/20260416T120000Z/ntv3_results/ntv3_bed_batch_summary.json"
 
 run_case "A3" \
   "Use DNABERT2 to compute token-level embeddings for a DNA sequence, output NPZ to output/dnabert2/." \
@@ -141,9 +141,9 @@ run_case "A7" \
   "nucleotide-transformer-v3-fine-tuning-workflow" "train-command.sh"
 
 run_case "A8" \
-  "Use \$borzoi-workflows to run track prediction for species human assembly hg38 interval chr19:6700000-6732768 with output head RNA and save outputs to case-study/track_prediction/borzoi_results." \
+  "Use \$borzoi-workflows to run track prediction BED batch for species human assembly hg38 on case-study-playbooks/track_prediction/bed/Test.interval.bed with run_id 20260416T120000Z." \
   "track-prediction" "route" \
-  "borzoi-workflows-track-prediction-workflow" "" "borzoi-workflows"
+  "run_borzoi_track_case.sh" "case-study-playbooks/track_prediction/20260416T120000Z/borzoi_results/borzoi_bed_batch_summary.json" "borzoi-workflows"
 
 run_case "A9" \
   "Use \$borzoi-workflows to score variant effect at hg38 chr12 position 1000000 REF A ALT G and save outputs to case-study/variant-effect/borzoi_results." \
