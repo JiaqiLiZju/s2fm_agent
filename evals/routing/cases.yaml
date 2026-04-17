@@ -97,7 +97,7 @@ cases:
       - dnabert2
     task: fine-tuning
   - id: route_020
-    query: "Use $nucleotide-transformer-v3 to run embedding case-study for human hg38 chr19:6700000-6732768 and save outputs to case-study/ntv3/output."
+    query: "Use $nucleotide-transformer-v3 to run embedding case-study on case-study-playbooks/embedding/bed/Test.interval.bed with run_id 20260417T000000Z and save outputs to case-study-playbooks/embedding/20260417T000000Z."
     expected_primary_skill: nucleotide-transformer-v3
     expected_secondary_skills: []
     task: embedding

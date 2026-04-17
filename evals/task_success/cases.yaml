@@ -67,12 +67,12 @@ cases:
     required_step_contains: "run_track_prediction.py"
     required_expected_output_contains: "output/ntv3_results"
   - id: task_success_012
-    query: "Use $nucleotide-transformer-v3 to run embedding for hg38 chr19:6700000-6702768 and save outputs under case-study/embedding/output."
+    query: "Use $nucleotide-transformer-v3 to run embedding case-study on case-study-playbooks/embedding/bed/Test.interval.bed with run_id 20260417T000000Z and save outputs under case-study-playbooks/embedding/20260417T000000Z."
     task: embedding
     min_runnable_steps: 1
     min_expected_outputs: 2
-    required_step_contains: "nucleotide-transformer-v3-embedding-workflow"
-    required_expected_output_contains: "embedding-metadata.json"
+    required_step_contains: "case-study-playbooks/embedding/run_embedding_case.sh"
+    required_expected_output_contains: "embedding_case_summary.json"
   - id: task_success_013
     query: "Use $nucleotide-transformer-v3 for binary classification fine-tuning with dataset schema sequence,label and single 24GB GPU budget; output train-command.sh and eval-metrics.json."
     task: fine-tuning
@@ -81,12 +81,12 @@ cases:
     required_step_contains: "nucleotide-transformer-v3-fine-tuning-workflow"
     required_expected_output_contains: "train-command.sh"
   - id: task_success_014
-    query: "Use $nucleotide-transformer-v3 to run embedding case-study for human hg38 chr19:6700000-6732768 and save outputs to case-study/ntv3/output."
+    query: "Run embedding multi-skill case-study with $dnabert2 $evo2-inference $nucleotide-transformer-v3 on case-study-playbooks/embedding/bed/Test.interval.bed with run_id 20260417T000000Z."
     task: embedding
     min_runnable_steps: 1
     min_expected_outputs: 2
-    required_step_contains: "nucleotide-transformer-v3-embedding-workflow"
-    required_expected_output_contains: "embedding-metadata.json"
+    required_step_contains: "case-study-playbooks/embedding/run_embedding_case.sh"
+    required_expected_output_contains: "logs/embedding_case_manifest.tsv"
   - id: task_success_015
     query: "Use $nucleotide-transformer-v3 for fine-tuning prep case-study with dataset schema sequence,label in case-study/ntv3/data and single 24GB GPU budget; output to case-study/ntv3/output with train-command.sh and eval-metrics.json."
     task: fine-tuning

@@ -46,8 +46,8 @@ For the four core executable tasks, the output contract defines the expected sha
 | Field | Value |
 |---|---|
 | `assumptions` | sequence-length-and-tokenization-must-match-model, embedding-granularity-must-be-explicit |
-| `runnable_steps` | `bash scripts/run_agent.sh --task embedding --query {selected_skill}-embedding-workflow` |
-| `expected_outputs` | plan-json:embedding, embedding-metadata.json, embedding-shape.txt |
+| `runnable_steps` | `bash case-study-playbooks/embedding/run_embedding_case.sh --bed case-study-playbooks/embedding/bed/Test.interval.bed --run-id $(date -u +%Y%m%dT%H%M%SZ) --skills all --continue-on-error 1` |
+| `expected_outputs` | plan-json:embedding, case-study-playbooks/embedding/<run_id>/embedding_case_summary.json, case-study-playbooks/embedding/<run_id>/logs/embedding_case_manifest.tsv, case-study-playbooks/embedding/<run_id>/logs/embedding_intervals_manifest.tsv, case-study-playbooks/embedding/<run_id>/logs/history_archive_manifest.tsv, plus per-skill interval results under `dnabert2_results`, `evo2_results`, `ntv3_results` |
 | `fallbacks` | switch-to-compatible-embedding-skill |
 | `retry_policy` | clarify-then-single-retry |
 
